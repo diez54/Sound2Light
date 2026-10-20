@@ -1,0 +1,108 @@
+name: Build Sound2Light Multitrack
+
+on:
+  push:
+    branches: [ master, main, multitrack ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ---------------------------------------------------------------- macOS (Apple Silicon)
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 5
+        run: brew install qt@5
+
+      - name: Build
+        run: |
+          export PATH="$(brew --prefix qt@5)/bin:$PATH"
+          cd src
+          qmake S2L.pro CONFIG+=release
+          make -j"$(sysctl -n hw.ncpu)"
+
+      - name: Bundle Qt and make DMG
+        run: |
+          export PATH="$(brew --prefix qt@5)/bin:$PATH"
+          cd src
+          mv s2l-multitrack.app "Sound2Light Multitrack.app"
+          macdeployqt "Sound2Light Multitrack.app" -qmldir=qml
+          # ad-hoc signature (required on Apple Silicon, no Apple developer account needed)
+          codesign --force --deep --sign - "Sound2Light Multitrack.app"
+          mkdir dmg && cp -R "Sound2Light Multitrack.app" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Sound2Light Multitrack" -srcfolder dmg -ov -format UDZO ../Sound2Light-Multitrack-macOS-arm64.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sound2Light-Multitrack-macOS-arm64
+          path: Sound2Light-Multitrack-macOS-arm64.dmg
+
+  # ---------------------------------------------------------------- Windows (x64)
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 5.15.2
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '5.15.2'
+          arch: 'win64_msvc2019_64'
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build (WASAPI + ASIO)
+        shell: cmd
+        run: |
+          cd src
+          qmake S2L.pro CONFIG+=release CONFIG+=asio
+          nmake
+
+      - name: Bundle Qt
+        shell: cmd
+        run: |
+          mkdir dist
+          copy src\release\s2l-multitrack.exe "dist\Sound2Light Multitrack.exe"
+          windeployqt --release --qmldir src\qml "dist\Sound2Light Multitrack.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sound2Light-Multitrack-Windows-x64
+          path: dist
+
+  # ---------------------------------------------------------------- Linux (compile check)
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qtbase5-dev qtdeclarative5-dev libasound2-dev libpulse-dev
+      - name: Build
+        run: |
+          cd src
+          qmake S2L.pro CONFIG+=release
+          make -j"$(nproc)"
+
+  # ---------------------------------------------------------------- Release on tag
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ macos, windows ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Zip Windows build
+        run: cd Sound2Light-Multitrack-Windows-x64 && zip -r ../Sound2Light-Multitrack-Windows-x64.zip .
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Sound2Light-Multitrack-macOS-arm64/Sound2Light-Multitrack-macOS-arm64.dmg
+            Sound2Light-Multitrack-Windows-x64.zip
