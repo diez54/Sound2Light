@@ -1,8 +1,8 @@
-# Sound2Light MULTIPISTE
+# Sound2LightMultiTrack
 
 > **Fork multipiste de Sound2Light** : une chaîne d'analyse complète par canal audio (jusqu'à 16 pistes),
 > flux OSC `/s2l/chN/…` par piste, entrée multicanal (Dante, CoreAudio, ASIO, WASAPI).
-> Toute la documentation en français : **[MULTIPISTE.md](MULTIPISTE.md)**.
+> Toute la documentation en français : **[MULTITRACK.md](MULTITRACK.md)**.
 > Téléchargements macOS et Windows : onglet **Actions** ou **Releases** de ce dépôt.
 
 ---

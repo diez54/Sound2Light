@@ -33,7 +33,7 @@ ApplicationWindow {
     minimumWidth:  160
     minimumHeight: 200
 
-	title: qsTr("Sound2Light MULTIPISTE")
+	title: qsTr("Sound2LightMultiTrack")
 
     // the minimal mode property, as an alias from the bpm settings where it is manipulated
     property alias minimalMode: spectrumWithControls.minimalMode

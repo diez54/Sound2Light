@@ -7,21 +7,21 @@
 	<key>CFBundleIconFile</key>
 	<string>@ICON@</string>
 	<key>CFBundleIdentifier</key>
-	<string>org.sound2light.multipiste</string>
+	<string>org.sound2light.multitrack</string>
 	<key>CFBundleName</key>
-	<string>Sound2Light MULTIPISTE</string>
+	<string>Sound2LightMultiTrack</string>
 	<key>CFBundleDisplayName</key>
-	<string>Sound2Light MULTIPISTE</string>
+	<string>Sound2LightMultiTrack</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.3.1.0.2-multipiste.1</string>
+	<string>0.0.3.1.0.2-multitrack.1</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Sound2Light MULTIPISTE analyse les entrées audio pour piloter la lumière.</string>
+	<string>Sound2LightMultiTrack analyse les entrées audio pour piloter la lumière.</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
 </dict>

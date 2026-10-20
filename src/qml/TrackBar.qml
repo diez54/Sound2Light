@@ -80,7 +80,7 @@ Rectangle {
 		}
 
 		GreyText {
-			text: "MULTIPISTE"
+			text: "MULTITRACK"
 			font.bold: true
 			font.letterSpacing: 3
 			color: "#FF6633"

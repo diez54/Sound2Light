@@ -1,11 +1,11 @@
-# Sound2Light MULTIPISTE
+# Sound2LightMultiTrack
 
 Version multipiste de [Sound2Light](https://github.com/ETCLabs/Sound2Light) (ETC Labs, licence MIT).
 L'original moyenne toutes les entrées en un seul signal mono. Ici, **chaque canal de la carte son a sa propre chaîne d'analyse** : spectre, 6 déclencheurs (Bass, LoMid, HiMid, High, Level, Silence) et détection de BPM, jusqu'à **16 pistes**.
 
 ## Ce qui change
 
-| | Original | MULTIPISTE |
+| | Original | MultiTrack |
 |---|---|---|
 | Entrée audio | stéréo, mixée en mono | jusqu'à 64 canaux (CoreAudio, WASAPI, ASIO) |
 | Analyse | 1 chaîne | 1 chaîne par piste, 1 à 16 pistes |
@@ -62,7 +62,7 @@ Toutes celles de l'original, plus :
 ## Installer
 
 - **macOS (Apple Silicon)** : ouvrir le `.dmg`, glisser l'app dans Applications. L'app n'est pas signée par Apple : au premier lancement, clic droit > Ouvrir, ou Réglages Système > Confidentialité et sécurité > « Ouvrir quand même ». Autoriser l'accès au micro, sinon l'entrée reste muette.
-- **Windows** : dézipper, lancer `Sound2Light MULTIPISTE.exe`.
+- **Windows** : dézipper, lancer `Sound2LightMultiTrack.exe`.
 
 Les réglages sont séparés de ceux du Sound2Light d'origine : les deux peuvent cohabiter.
 

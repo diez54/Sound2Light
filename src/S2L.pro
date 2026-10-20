@@ -1,4 +1,4 @@
-TARGET = s2l-multipiste
+TARGET = Sound2LightMultiTrack
 LANGUAGE = C++
 
 TEMPLATE = app

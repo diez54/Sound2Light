@@ -63,7 +63,7 @@ Dialog {
 						font.bold: true
 						font.letterSpacing: 3
 						color: "#FF6633"
-						text: "MULTIPISTE"
+						text: "MULTITRACK"
 					}
 					GreyText {
 						width: parent.width

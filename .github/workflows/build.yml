@@ -1,4 +1,4 @@
-name: Build Sound2Light MULTIPISTE
+name: Build Sound2LightMultiTrack
 
 on:
   push:
@@ -31,18 +31,17 @@ jobs:
         run: |
           export PATH="$(brew --prefix qt@5)/bin:$PATH"
           cd src
-          mv s2l-multipiste.app "Sound2Light MULTIPISTE.app"
-          macdeployqt "Sound2Light MULTIPISTE.app" -qmldir=qml
+          macdeployqt "Sound2LightMultiTrack.app" -qmldir=qml
           # ad-hoc signature (required on Apple Silicon, no Apple developer account needed)
-          codesign --force --deep --sign - "Sound2Light MULTIPISTE.app"
-          mkdir dmg && cp -R "Sound2Light MULTIPISTE.app" dmg/
+          codesign --force --deep --sign - "Sound2LightMultiTrack.app"
+          mkdir dmg && cp -R "Sound2LightMultiTrack.app" dmg/
           ln -s /Applications dmg/Applications
-          hdiutil create -volname "Sound2Light MULTIPISTE" -srcfolder dmg -ov -format UDZO ../Sound2Light-MULTIPISTE-macOS-arm64.dmg
+          hdiutil create -volname "Sound2LightMultiTrack" -srcfolder dmg -ov -format UDZO ../Sound2LightMultiTrack-macOS-arm64.dmg
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Sound2Light-MULTIPISTE-macOS-arm64
-          path: Sound2Light-MULTIPISTE-macOS-arm64.dmg
+          name: Sound2LightMultiTrack-macOS-arm64
+          path: Sound2LightMultiTrack-macOS-arm64.dmg
 
   # ---------------------------------------------------------------- Windows (x64)
   windows:
@@ -69,12 +68,12 @@ jobs:
         shell: cmd
         run: |
           mkdir dist
-          copy src\release\s2l-multipiste.exe "dist\Sound2Light MULTIPISTE.exe"
-          windeployqt --release --qmldir src\qml "dist\Sound2Light MULTIPISTE.exe"
+          copy src\release\Sound2LightMultiTrack.exe dist\Sound2LightMultiTrack.exe
+          windeployqt --release --qmldir src\qml "dist\Sound2LightMultiTrack.exe"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Sound2Light-MULTIPISTE-Windows-x64
+          name: Sound2LightMultiTrack-Windows-x64
           path: dist
 
   # ---------------------------------------------------------------- Linux (compile check)
@@ -100,9 +99,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
       - name: Zip Windows build
-        run: cd Sound2Light-MULTIPISTE-Windows-x64 && zip -r ../Sound2Light-MULTIPISTE-Windows-x64.zip .
+        run: cd Sound2LightMultiTrack-Windows-x64 && zip -r ../Sound2LightMultiTrack-Windows-x64.zip .
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            Sound2Light-MULTIPISTE-macOS-arm64/Sound2Light-MULTIPISTE-macOS-arm64.dmg
-            Sound2Light-MULTIPISTE-Windows-x64.zip
+            Sound2LightMultiTrack-macOS-arm64/Sound2LightMultiTrack-macOS-arm64.dmg
+            Sound2LightMultiTrack-Windows-x64.zip
