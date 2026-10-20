@@ -101,7 +101,7 @@ jobs:
             Write-Output ("::warning title=dist content::" + ((Get-ChildItem dist -Name) -join ", "))
             exit 1
           }
-          if (-not (Test-Path dist\qml\QtQuick\Controls)) { Fail "QtQuick Controls missing in dist\qml" }
+          if (-not (Test-Path dist\QtQuick\Controls)) { Fail "QtQuick Controls missing in dist" }
           if (-not (Test-Path dist\platforms\qwindows.dll)) { Fail "platform plugin qwindows.dll missing" }
           New-Item -ItemType Directory -Force "$env:APPDATA\Sound2Light" | Out-Null
           "[General]`r`nformatVersion=1`r`ninputDeviceName=Signal de test (8 canaux)`r`n" | Set-Content -Encoding UTF8 "$env:APPDATA\Sound2Light\Sound2LightMultiTrack.ini"
