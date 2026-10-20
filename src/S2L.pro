@@ -92,7 +92,9 @@ macx {
     LIBS += -framework CoreAudio -framework CoreFoundation -framework AudioToolbox
     QMAKE_INFO_PLIST = $$PWD/macos/Info.plist
     ICON = $$PWD/images/icons/etcicon.icns
-    QMAKE_MACOSX_DEPLOYMENT_TARGET = 11.0
+    # minimum macOS version, can be set from the command line: qmake S2L_MACOS_MIN=10.13
+    isEmpty(S2L_MACOS_MIN): S2L_MACOS_MIN = 11.0
+    QMAKE_MACOSX_DEPLOYMENT_TARGET = $$S2L_MACOS_MIN
 }
 
 win32 {
