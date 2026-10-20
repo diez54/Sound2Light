@@ -21,11 +21,8 @@
 #ifndef MAINCONTROLLER_H
 #define MAINCONTROLLER_H
 
-#include "FFTAnalyzer.h"
-#include "BPMDetector.h"
-#include "BPMTapDetector.h"
-#include "MonoAudioBuffer.h"
-#include "AudioInputInterface.h"
+#include "Track.h"
+#include "MultiChannelInput.h"
 #include "OSCNetworkManager.h"
 #include "OSCMapping.h"
 #include "versionInfo.h"
@@ -40,105 +37,76 @@
 #include <QUrl>
 #include <QGuiApplication>
 #include <QQuickItem>
+#include <QTimer>
+#include <QVector>
 
-#include <iostream>
 
-// Rate to calculate the FFT (and Trigger signals) in Hz / FPS
+// the rate in Hz the FFT and the triggers are updated
 static const int FFT_UPDATE_RATE = 44; // Hz
 
-// Rate to send OSC Level Feedback (if activated) in Hz / FPS
+// the rate in Hz the OSC level feedback is sent
 static const int OSC_LEVEL_FEEDBACK_RATE = 15; // Hz
 
 
-// Forward declarations:
-class TriggerGenerator;
-class EnvelopeTriggerGenerator;
 class TriggerGuiController;
-class EnvelopeTriggerGuiController;
 
-
-// Processing chains in this software:
-// 1. Chain:  AudioInput (async) -> MonoAudioBuffer
-// 2. Chain:  QTimer(44Hz) -> FFTAnalyzer -> TriggerGenerator -> TriggerFilter -> OSCNetworkManager
-
-
-// This class coordinates the communication of Model and GUI,
-// initializes the objects and manages presets and persistence.
+// The MainController creates and manages all tracks (analysis chains),
+// the multichannel audio input, OSC and presets.
+// The GUI always shows and edits the "current track"; all getters / setters
+// that existed in the single track version operate on this track.
 class MainController : public QObject
 {
 	Q_OBJECT
 
-	// this property is used to show and hide the dB label and to activate the dB checkbox:
 	Q_PROPERTY(bool decibelConversion READ getDecibelConversion NOTIFY decibelConversionChanged)
-	// this property is used by the AGC checkbox:
 	Q_PROPERTY(bool agcEnabled READ getAgcEnabled NOTIFY agcEnabledChanged)
-	// the base name of the preset file to be displayed in GUI:
 	Q_PROPERTY(QString presetName READ getPresetName NOTIFY presetNameChanged)
-	// this property indicates if the current preset has been changed but not stored yet:
 	Q_PROPERTY(bool presetChangedButNotSaved READ getPresetChangedButNotSaved NOTIFY presetChangedButNotSavedChanged)
-    // this property is used for the lowSoloMode checkbox:
-    Q_PROPERTY(bool lowSoloMode READ getLowSoloMode WRITE setLowSoloMode NOTIFY lowSoloModeChanged)
+	Q_PROPERTY(bool lowSoloMode READ getLowSoloMode WRITE setLowSoloMode NOTIFY lowSoloModeChanged)
+	Q_PROPERTY(bool autoBpm READ getAutoBpm WRITE setAutoBpm NOTIFY autoBpmChanged)
+	Q_PROPERTY(bool waveformVisible READ getWaveformVisible WRITE setWaveformVisible NOTIFY waveformVisibleChanged)
 
-    Q_PROPERTY(bool autoBpm READ getAutoBpm WRITE setAutoBpm NOTIFY autoBpmChanged)
-    Q_PROPERTY(bool waveformVisible READ getWaveformVisible WRITE setWaveformVisible NOTIFY waveformVisibleChanged)
+	// ---- multitrack ----
+	Q_PROPERTY(int trackCount READ getTrackCount WRITE setTrackCount NOTIFY trackCountChanged)
+	Q_PROPERTY(int currentTrack READ getCurrentTrack WRITE setCurrentTrack NOTIFY currentTrackChanged)
+	Q_PROPERTY(int maxTracks READ getMaxTracks CONSTANT)
+	Q_PROPERTY(int inputChannelCount READ getInputChannelCount NOTIFY inputChanged)
+	Q_PROPERTY(bool multitrackOscEnabled READ getMultitrackOscEnabled WRITE setMultitrackOscEnabled NOTIFY multitrackOscEnabledChanged)
+	Q_PROPERTY(QString inputInfo READ getInputInfo NOTIFY inputChanged)
 
 public:
-    explicit MainController(QQmlApplicationEngine* m_qmlEngine, QObject* parent = nullptr);
+	explicit MainController(QQmlApplicationEngine* m_qmlEngine, QObject* parent = nullptr);
 	~MainController();
 
-	// initializes everything that has to be done before QML is loaded
+	// initializes everything that can or must be done before the QML file is loaded
 	void initBeforeQmlIsLoaded();
-
-	// initializes everything that has to be done after QML is loaded
+	// initializes everything that depends on the loaded QML file
 	void initAfterQmlIsLoaded();
 
 signals:
-	// emitted when the input device was changed
 	void inputChanged();
-
-	// emitted when settings were changed
 	void settingsChanged();
-
-	// emitted when the setting to convert to dB values is changed
 	void decibelConversionChanged();
-
-	// emitted when the AGC state is changed
 	void agcEnabledChanged();
-
-	// emitted when presetChangedButNotSaved state changed
 	void presetChangedButNotSavedChanged();
-
-	// emitted when the preset name changed
 	void presetNameChanged();
-
-	// emitted when the gain has been changed by loading a preset file
-	// (won't be emitted atm when gain is changed by agc)
 	void gainChanged();
-
-	// emitted when the compression has been changed by loading a preset file
 	void compressionChanged();
+	void presetChanged();
+	void lowSoloModeChanged();
+	void bpmActiveChanged();
+	void autoBpmChanged();
+	void bpmRangeChanged();
+	void waveformVisibleChanged();
+	void bpmMuteChanged();
 
-	// emitted when a value of the preset changed
-    void presetChanged();
+	void trackCountChanged();
+	void currentTrackChanged();
+	void trackNamesChanged();
+	void trackChannelsChanged();
+	void multitrackOscEnabledChanged();
 
-    // emitted when lowSoloMode changed
-    void lowSoloModeChanged();
-
-    // emitted if the bpm activation changed
-    void bpmActiveChanged();
-
-    void autoBpmChanged();
-
-    // emitted if the bpm range changed
-    void bpmRangeChanged();
-
-    // emitted if the waveform visiblity changed
-    void waveformVisibleChanged();
-
-    // emitted if the bpm mute changed
-    void bpmMuteChanged();
-
-	// forwarded from OSCNetworkManager:
+	// forwarded signals from OSCNetworkManager:
 	void messageReceived(OSCMessage msg);
 	void packetSent();
 	void useTcpChanged();
@@ -146,157 +114,118 @@ signals:
 	void addressChanged();
 	void oscLogChanged();
 
-
 public slots:
 
-	// initializes the audio input
 	void initAudioInput();
+	void activateBPM();
+	void deactivateBPM();
 
-    // activates or deactivates the bpm detectin
-    void activateBPM();
-    void deactivateBPM();
-
-	// saves settings before application exits
 	void onExit();
-
-	// minimizes or restores the dialogs depending on visibility
 	void onVisibilityChanged();
-
-	// save all settings to QSettings
 	void savePresetIndependentSettings() const;
-	// load all settings from QSettings
 	void loadPresetIndependentSettings();
-	// restores the window size and position
 	void restoreWindowGeometry();
 
-    // update function passed to the FFTAnalyzer
-    void updateFFT() { m_fft.calculateFFT(m_lowSoloMode); }
+	// pumps the audio input, runs FFT + triggers on all active tracks and sends the multitrack OSC stream
+	void updateFFT();
+	// runs the BPM detection on all active tracks
+	void updateBPM();
 
-    // update function passed to the BPMDetector
-    void updateBPM() { m_bpm.detectBPM(); }
-
-	// ------------------- Presets --------------------------------
-
-	// load a preset file, creates a new file if it does not exist
+	// ------------------- Presets ---------------------
 	void loadPreset(const QString& fileName, bool createIfNotExistent = false);
-	// saves state to a preset file
 	void savePresetAs(const QString& fileName, bool isAutosave = false);
-	// saves state to currently loaded preset file
 	void saveCurrentPreset();
-	// save unsaved changes in an autosave file
 	void autosave();
-	// restores the preset saved in independent settings
 	void restorePreset();
-
-	// resets all values to their defaults
 	void resetPreset();
-
-	// deletes the file of a preset
 	void deletePreset(const QString& fileName);
-
-	// returns the directory where the preset files are stored
 	QString getPresetDirectory() const;
-
-	// returns the base name of the preset file to be displayed in GUI
 	QString getPresetName() const;
-
-	// returns if the current preset has been changed but not stored yet
 	bool getPresetChangedButNotSaved() const { return m_presetChangedButNotSaved; }
-
-	// updates the presetChangedButNotSaved status
 	void onPresetChanged();
-
-	// opens a QFileDialog to choose the fileName for a preset and calls savePresetAs()
 	void openSavePresetAsDialog();
-
-	// opens a QFileDialog to choose the fileName of a preset and calls loadPreset()
 	void openLoadPresetDialog();
 
+	// ------------------- Multitrack ---------------------
+	int getTrackCount() const { return m_trackCount; }
+	void setTrackCount(int value);
+	int getCurrentTrack() const { return m_currentTrack; }
+	void setCurrentTrack(int index);
+	int getMaxTracks() const { return MAX_TRACKS; }
+	int getInputChannelCount() const { return m_audioInput ? m_audioInput->getChannelCount() : 0; }
+	QString getInputInfo() const;
 
-	// ------------------- Functions used by GUI -----------------------------
+	QString getTrackName(int index) const;
+	void setTrackName(int index, const QString& name);
+	int getTrackChannel(int index) const;
+	void setTrackChannel(int index, int channel);
 
-	// returns the chosen consoleType as a string
+	// levels of the 6 triggers of a track [0...1]
+	QList<qreal> getTrackLevels(int index) const;
+	// trigger states (after delays) of the 6 triggers of a track
+	QList<bool> getTrackActives(int index) const;
+	// peak level of each input channel since the last call [0...1]
+	QList<qreal> getChannelPeaks();
+	// BPM of a track as a rounded number, 0 if none
+	int getTrackBpm(int index) const;
+
+	bool getMultitrackOscEnabled() const { return m_multitrackOscEnabled; }
+	void setMultitrackOscEnabled(bool value);
+
+	// pointer to a track (nullptr if out of range)
+	Track* track(int index) const { return (index >= 0 && index < m_tracks.size()) ? m_tracks[index] : nullptr; }
+
+	// ------------------- Console Type ---------------------
 	QString getConsoleType() const { return m_consoleType; }
-	// sets the used console type (either "EOS" or "Cobalt")
 	void setConsoleType(QString value);
 
-    // returns if low solo mode is active
-    bool getLowSoloMode() const { return m_lowSoloMode; }
-    // enables or disables low solo mode
-    void setLowSoloMode(bool value) { m_lowSoloMode = value; emit lowSoloModeChanged(); }
+	// ------------------- Current track settings ---------------------
+	bool getLowSoloMode() const { return cur()->getLowSoloMode(); }
+	void setLowSoloMode(bool value) { cur()->setLowSoloMode(value); emit lowSoloModeChanged(); emit presetChanged(); }
 
-	// returns the current spectrum outline as a list of qreal values in the range 0...1
-	// used in GUI to display SpectrumPlot
 	QList<qreal> getSpectrumPoints();
-
-	// returns the current version string
 	QString getVersionString() { return VERSION_STRING; }
 
-    // Triggers a BPM Tap
-    void triggerBeat();
+	// ------------------- BPM (current track) ---------------------
+	void triggerBeat();
+	void setBPM(float value);
+	bool getBPMActive() { return cur()->m_bpmActive; }
+	bool getBPMManual() { return cur()->getBpmTap().hasBpm() && !cur()->m_autoBpm; }
+	void setBPMActive(bool value);
+	bool getAutoBpm() const { return cur()->m_autoBpm; }
+	void setAutoBpm(bool value);
+	float getBPM() { return cur()->getCurrentBpm(); }
+	bool bpmIsOld() { return cur()->getBpm().bpmIsOld(); }
+	void setMinBPM(int value);
+	int getMinBPM() { return cur()->getBpm().getMinBPM(); }
+	bool getBPMMute() { return cur()->getBpmOsc().getBPMMute(); }
+	void toggleBPMMute() { cur()->getBpmOsc().toggleBPMMute(); emit bpmMuteChanged(); }
+	bool getWaveformVisible() { return cur()->m_waveformVisible; }
+	void setWaveformVisible(bool value);
+	QList<qreal> getWavePoints();
+	QList<bool> getWaveOnsets();
+	QList<QString> getWaveColors();
+	QStringList getBPMOscCommands() { return cur()->getBpmOsc().getCommands(); }
+	void setBPMOscCommands(const QStringList commands) { cur()->getBpmOsc().setCommands(commands); }
 
-    // Sets a manual BPM
-    void setBPM(float value);
-
-    // returns if the bpm detection is currently active
-    bool getBPMActive() { return m_bpmActive; }
-    bool getBPMManual() { return m_bpmTap.hasBpm() && !m_autoBpm; }
-    // enable or disables bpm detection
-    void setBPMActive(bool value);
-
-    bool getAutoBpm() const { return m_autoBpm; }
-    void setAutoBpm(bool value);
-
-    // forward calls to BPMDetector
-    // returns the current bpm
-    float getBPM() { return getBPMManual() || m_bpm.getBPM() == 0.0f ? m_bpmTap.getBpm() : m_bpm.getBPM(); }
-    // returns if the detected bpm is old and should be marked as such in the gui
-    bool bpmIsOld() { return m_bpm.bpmIsOld(); }
-    // sets the minium bpm of the range
-    void setMinBPM(int value);
-    // gets the minium bpm of the range
-    int getMinBPM() { return m_bpm.getMinBPM(); }
-
-    // set/get bpm mute
-    bool getBPMMute() { return m_bpmOSC.getBPMMute(); }
-    void toggleBPMMute() { m_bpmOSC.toggleBPMMute(); emit bpmMuteChanged(); }
-
-    // set/get the waveform visibility
-    bool getWaveformVisible() { return m_waveformVisible; }
-    void setWaveformVisible(bool value);
-
-    // returns the last seconds of waveform as a list of qreal values in the range 0...1
-    // as well as the marks where a peak was detected as a boolean value and colors that represent the spectrum
-    // used in GUI to display the BeatPlot
-    QList<qreal> getWavePoints();
-    QList<bool> getWaveOnsets();
-    QList<QString> getWaveColors();
-
-    // Gets or sets the osc commands sent by the bpm detector
-    QStringList getBPMOscCommands() { return m_bpmOSC.getCommands(); }
-    void setBPMOscCommands(const QStringList commands) { m_bpmOSC.setCommands(commands); }
-
-	// forward calls to AudioInputInterface
-	// see AudioInputInterface.h for documentation
+	// ------------------- Audio Input ---------------------
 	QStringList getAvailableInputs() const { return m_audioInput->getAvailableInputs(); }
 	QString getActiveInputName() const { return m_audioInput->getActiveInputName(); }
-	void setInputByName(const QString& name) { m_audioInput->setInputByName(name); emit inputChanged(); emit presetChanged(); }
+	void setInputByName(const QString& name);
 	qreal getVolume() const { return m_audioInput->getVolume(); }
 	void setVolume(const qreal& value) { m_audioInput->setVolume(value); emit presetChanged(); }
 
-	// forward calls to ScaledSpectrum of FFTAnalyzer
-	// see ScaledSpectrum.h for documentation
-	qreal getFftGain() const { return m_fft.getScaledSpectrum().getGain(); }
-	void setFftGain(const qreal& value) { m_fft.getScaledSpectrum().setGain(value); emit gainChanged(); emit presetChanged(); }
-	qreal getFftCompression() const { return m_fft.getScaledSpectrum().getCompression(); }
-	void setFftCompression(const qreal& value) { m_fft.getScaledSpectrum().setCompression(value); emit compressionChanged(); emit presetChanged(); }
-	bool getDecibelConversion() const { return m_fft.getScaledSpectrum().getDecibelConversion(); }
-	void setDecibelConversion(bool value) { m_fft.getScaledSpectrum().setDecibelConversion(value); emit decibelConversionChanged(); emit presetChanged(); }
-	bool getAgcEnabled() const { return m_fft.getScaledSpectrum().getAgcEnabled(); }
-	void setAgcEnabled(bool value) { m_fft.getScaledSpectrum().setAgcEnabled(value); emit agcEnabledChanged(); emit presetChanged(); }
+	// ------------------- FFT parameters (current track) ---------------------
+	qreal getFftGain() const { return cur()->getFft().getScaledSpectrum().getGain(); }
+	void setFftGain(const qreal& value) { cur()->getFft().getScaledSpectrum().setGain(value); emit gainChanged(); emit presetChanged(); }
+	qreal getFftCompression() const { return cur()->getFft().getScaledSpectrum().getCompression(); }
+	void setFftCompression(const qreal& value) { cur()->getFft().getScaledSpectrum().setCompression(value); emit compressionChanged(); emit presetChanged(); }
+	bool getDecibelConversion() const { return cur()->getFft().getScaledSpectrum().getDecibelConversion(); }
+	void setDecibelConversion(bool value) { cur()->getFft().getScaledSpectrum().setDecibelConversion(value); emit decibelConversionChanged(); emit presetChanged(); }
+	bool getAgcEnabled() const { return cur()->getFft().getScaledSpectrum().getAgcEnabled(); }
+	void setAgcEnabled(bool value) { cur()->getFft().getScaledSpectrum().setAgcEnabled(value); emit agcEnabledChanged(); emit presetChanged(); }
 
-	// forward calls to OSCNetworkManager
-	// see OSCNetworkManager.h for documentation
+	// ------------------- OSC ---------------------
 	QString getOscIpAddress() const { return m_osc.getIpAddress().toString(); }
 	void setOscIpAddress(const QString& value) { m_osc.setIpAddress(QHostAddress(value)); emit settingsChanged(); }
 	quint16 getOscUdpTxPort() const { return m_osc.getUdpTxPort(); }
@@ -319,93 +248,58 @@ public slots:
 	void sendOscMessage(QString message, bool forced) { m_osc.sendMessage(message, forced); }
 	void sendOscMessage(QString path, QString argument, bool forced) { m_osc.sendMessage(path, argument, forced); }
 	void clearOscLog() const { m_osc.clearLog(); }
-
-	// forward calls to OSCMapping
-	// see OSCMapping.h for documentation
 	bool getOscInputEnabled() const { return m_oscMapping.getInputEnabled(); }
 	void setOscInputEnabled(bool value) { m_oscMapping.setInputEnabled(value); }
-
-	// sends an OSC test message
 	void sendOscTestMessage(QString message);
 
-	// opens a dialog from a QML file
+	// ------------------- GUI helpers ---------------------
 	void openDialog(const QString& qmlDialogFile, QString propertyName = "", QVariant propertyValue = QVariant());
-
-	// removes dialog from openend dialogs list
 	void dialogIsClosed(QObject* object);
-
-	// returns if the CTRL key is pressed
 	bool controlIsPressed() const { return QGuiApplication::keyboardModifiers() & Qt::ControlModifier; }
-
-	// returns the geometry of the main window
 	QRect getWindowGeometry() const { return getMainWindow()->geometry(); }
-
-	// returns the geometry of the window that contains the item
 	QRect getWindowGeometryOfItem(const QVariant& item) const { return item.value<QQuickItem*>()->window()->geometry(); }
-
-	// sets a property of a QQuickItem to a value without changing its bindings (in opposite to setting it from QML directly)
 	void setPropertyWithoutChangingBindings(const QVariant& item, QString name, QVariant value);
 
-	// returns if level feedback via OSC is enabled
+	// ------------------- OSC Level Feedback ---------------------
 	bool oscLevelFeedbackIsEnabled();
-	// enables or disables the transmission of level feedback via OSC
 	void enableOscLevelFeedback(bool value);
 
 private:
-	// instantiates the trigger generators
-	void initializeGenerators();
-
-	// connects the trigger generators with the GUI by creating GuiControllers and setting context properties
-	void connectGeneratorsWithGui();
-
-	// returns the main window
+	Track* cur() const { return m_tracks[m_currentTrack]; }
+	// publishes the trigger controllers of the current track to QML and notifies the GUI
+	void bindCurrentTrackToGui();
+	void notifyGuiOfTrackSettings();
 	QQuickWindow* getMainWindow() const;
-
-	// checks if settings format is valid
 	bool settingsFormatIsValid(QSettings& settings) const;
 
 private slots:
-	// sends current state via OSC if connection changed
 	void onConnectedChanged();
 
 public:  // to allow access from OSCMapping class without getters
-	TriggerGuiController* m_bassController;  // GUI Controller for Bass TriggerGenerator
-	TriggerGuiController* m_loMidController;  // GUI Controller for LoMid TriggerGenerator
-	TriggerGuiController* m_hiMidController;  // GUI Controller for HiMid TriggerGenerator
-	TriggerGuiController* m_highController;  // GUI Controller for High TriggerGenerator
-    TriggerGuiController* m_envelopeController;  // GUI Controller for Level TriggerGenerator
-	TriggerGuiController* m_silenceController;  // GUI Controller for Silence TriggerGenerator
+	// controllers of the CURRENT track:
+	TriggerGuiController* m_bassController;
+	TriggerGuiController* m_loMidController;
+	TriggerGuiController* m_hiMidController;
+	TriggerGuiController* m_highController;
+	TriggerGuiController* m_envelopeController;
+	TriggerGuiController* m_silenceController;
 
 protected:
-	QQmlApplicationEngine*		m_qmlEngine;  // pointer to QmlEngine (created in main.cpp)
-	QVector<TriggerGeneratorInterface*> m_triggerContainer;  // list of all TriggerGenerators
-	MonoAudioBuffer				m_buffer;  // MonoAudioBuffer instance
-	AudioInputInterface*		m_audioInput;  // pointer to AudioInputInterface implementation
-	FFTAnalyzer					m_fft;  // FFTAnalyzer instance
-	OSCNetworkManager			m_osc;  // OSCNetworkManager instance
-	QString						m_consoleType;  // console type as string
-	QTimer						m_fftUpdateTimer;  // Timer used to trigger FFT update
-	QString						m_currentPresetFilename;  // file path and name of active preset
-	bool						m_presetChangedButNotSaved;  // true, if the preset has been changed but not saved yet
-	QMap<QString, QObject*>		m_dialogs;  // list of all open dialogs (QML-filename -> GUI element instance)
-	OSCMapping					m_oscMapping;  // OSCMapping instance
-	QTimer						m_oscUpdateTimer;  // Timer used to trigger OSC level feedback
-    bool                        m_lowSoloMode;  // true if low solo mode is active
-    BPMOscControler             m_bpmOSC; // Manages transmiting the bpm via osc
-    BPMDetector                 m_bpm; // BPMDetector instance
-    BPMTapDetector              m_bpmTap; // BPMTapDetector instance
-    bool                        m_bpmActive; // true if the bpm detection is active
-    QTimer                      m_bpmUpdatetimer; // Timer to trigger bpm update
-    bool                        m_waveformVisible; // true if the waveform is visible
-    bool                        m_autoBpm; // true if BPM should be set automatically
-
-	TriggerGenerator* m_bass;  // pointer to Bass TriggerGenerator instance
-	TriggerGenerator* m_loMid;  // pointer to LoMid TriggerGenerator instance
-	TriggerGenerator* m_hiMid;  // pointer to HiMid TriggerGenerator instance
-	TriggerGenerator* m_high;  // pointer to High TriggerGenerator instance
-	TriggerGenerator* m_envelope;  // pointer to Level TriggerGenerator instance
-	TriggerGenerator* m_silence;  // pointer to Silence TriggerGenerator instance
-
+	QQmlApplicationEngine*		m_qmlEngine;
+	OSCNetworkManager			m_osc;
+	QVector<Track*>				m_tracks;  // all MAX_TRACKS tracks (only the first m_trackCount are processed)
+	int							m_trackCount;
+	int							m_currentTrack;
+	bool						m_multitrackOscEnabled;
+	MultiChannelInput*			m_audioInput;
+	QString						m_consoleType;
+	QTimer						m_fftUpdateTimer;
+	QString						m_currentPresetFilename;
+	bool						m_presetChangedButNotSaved;
+	QMap<QString, QObject*>		m_dialogs;
+	OSCMapping					m_oscMapping;
+	QTimer						m_oscUpdateTimer;
+	QTimer						m_bpmUpdatetimer;
 };
 
 #endif // MAINCONTROLLER_H

@@ -1,9 +1,9 @@
-TARGET = s2l
+TARGET = s2l-multitrack
 LANGUAGE = C++
 
 TEMPLATE = app
 
-QT += qml quick multimedia quickwidgets network widgets
+QT += qml quick quickwidgets network widgets
 
 CONFIG += c++11 thread
 
@@ -13,7 +13,9 @@ SOURCES += main.cpp \
     FFTAnalyzer.cpp \
     MainController.cpp \
     MonoAudioBuffer.cpp \
-    QAudioInputWrapper.cpp \
+    MultiChannelInput.cpp \
+    Track.cpp \
+    rtaudio/RtAudio.cpp \
     ScaledSpectrum.cpp \
     TriggerFilter.cpp \
     OSCParser.cpp \
@@ -57,13 +59,14 @@ HEADERS += \
     ffft/FFTRealUseTrigo.hpp \
     ffft/OscSinCos.h \
     ffft/OscSinCos.hpp \
-    AudioInputInterface.h \
     BasicFFTInterface.h \
     FFTAnalyzer.h \
     FFTRealWrapper.h \
     MainController.h \
     MonoAudioBuffer.h \
-    QAudioInputWrapper.h \
+    MultiChannelInput.h \
+    Track.h \
+    rtaudio/RtAudio.h \
     ScaledSpectrum.h \
     TriggerGeneratorInterface.h \
     TriggerFilter.h \
@@ -80,6 +83,43 @@ HEADERS += \
     BPMDetector.h \
     BPMOscControler.h \
     BPMTapDetector.h
+
+# ------------------------ Audio backend (RtAudio) ------------------------
+INCLUDEPATH += rtaudio
+
+macx {
+    DEFINES += __MACOSX_CORE__
+    LIBS += -framework CoreAudio -framework CoreFoundation -framework AudioToolbox
+    QMAKE_INFO_PLIST = $$PWD/macos/Info.plist
+    ICON = $$PWD/images/icons/etcicon.icns
+    QMAKE_MACOSX_DEPLOYMENT_TARGET = 11.0
+}
+
+win32 {
+    DEFINES += __WINDOWS_WASAPI__
+    LIBS += -lole32 -lwinmm -lksuser -lmfplat -lmfuuid -lwmcodecdspuuid -luuid
+    RC_ICONS = images/icons/etcicon.ico
+    # ASIO (i.e. Dante Virtual Soundcard in ASIO mode): build with "qmake CONFIG+=asio"
+    # Note: the Steinberg ASIO SDK files are GPLv3 / Steinberg licensed.
+    asio {
+        DEFINES += __WINDOWS_ASIO__
+        INCLUDEPATH += rtaudio/include
+        SOURCES += rtaudio/include/asio.cpp \
+                   rtaudio/include/asiodrivers.cpp \
+                   rtaudio/include/asiolist.cpp \
+                   rtaudio/include/iasiothiscallresolver.cpp
+        LIBS += -ladvapi32 -luser32
+    }
+}
+
+unix:!macx {
+    DEFINES += __LINUX_ALSA__
+    LIBS += -lasound -lpthread
+    packagesExist(libpulse-simple) {
+        DEFINES += __LINUX_PULSE__
+        LIBS += -lpulse-simple -lpulse
+    }
+}
 
 DISTFILES += \
     LICENSE.txt \

@@ -45,6 +45,9 @@ public:
 
     // --------------------------------------- GUI Functions -----------------------------------------------
     // Returns the commands
+    // sets the OSC path prefix used for feedback messages (default "/s2l/out/")
+    void setOutPrefix(const QString& prefix) { m_outPrefix = prefix; }
+
     QStringList getCommands() { return m_oscCommands; }
 
     // Sets the command at the given index
@@ -56,6 +59,7 @@ public:
 protected:
     bool                m_bpmMute; // If the bpm osc is muted
     OSCNetworkManager&  m_osc; // The network manager to send network signals thorugh
+    QString             m_outPrefix; // OSC path prefix for feedback messages
     QStringList         m_oscCommands; // The osc messages to be sent on a tempo changed. Delivered as finished strings with the <BPM> (<BPM1-2>, <BPM4> etc. for fractions from 1/4 to 4) qualifier to be changed. The message is generated in the qml because thats the way tim did it with the other osc messages
 };
 

@@ -113,6 +113,34 @@ void OSCNetworkManager::sendMessage(QString path, QString argument, bool forced)
 	}
 }
 
+void OSCNetworkManager::sendFloat(const QString& path, float value, bool forced)
+{
+	if (!m_isEnabled && !forced) return;
+
+	size_t outSize;
+	OSCPacketWriter packetWriter(path.toStdString());
+	packetWriter.AddFloat32(value);
+	char* packet = packetWriter.Create(outSize);
+	sendMessageData(packet, outSize);
+
+	// high rate stream: not logged to keep the log readable
+}
+
+void OSCNetworkManager::sendInt(const QString& path, int value, bool forced)
+{
+	if (!m_isEnabled && !forced) return;
+
+	size_t outSize;
+	OSCPacketWriter packetWriter(path.toStdString());
+	packetWriter.AddInt32(value);
+	char* packet = packetWriter.Create(outSize);
+	sendMessageData(packet, outSize);
+
+	if (m_logOutgoingMsg) {
+		addToLog("[Out] " + path + "=" + QString::number(value));
+	}
+}
+
 void OSCNetworkManager::sendMessageData(char* packet, size_t outSize)
 {
 	// send packet either with UDP or TCP:

@@ -36,6 +36,34 @@ void OSCMapping::handleMessage(OSCMessage msg)
 	// do nothing if input is not enabled:
 	if (!m_inputIsEnabled) return;
 
+	// ---------------- multitrack messages ----------------
+	if (msg.pathStartsWith("/s2l/track_count")) {
+		// sets the number of active tracks:
+		if (msg.arguments().size() >= 1) {
+			m_controller->setTrackCount(int(msg.value()));
+		}
+		return;
+	} else if (msg.pathStartsWith("/s2l/track")) {
+		// selects the track shown in the GUI (1-based):
+		if (msg.arguments().size() >= 1) {
+			m_controller->setCurrentTrack(int(msg.value()) - 1);
+		}
+		return;
+	} else if (msg.path().size() >= 4 && msg.pathPart(0) == "s2l" && msg.pathPart(1).startsWith("ch")
+			   && msg.pathPart(3) == "mute") {
+		// /s2l/chN/<band>/mute toggles the mute of a band of track N:
+		bool ok = false;
+		const int trackIndex = msg.pathPart(1).mid(2).toInt(&ok) - 1;
+		Track* t = ok ? m_controller->track(trackIndex) : nullptr;
+		if (!t) return;
+		for (int k=0; k<NUM_TRIGGERS; ++k) {
+			if (Track::oscBandName(k) == msg.pathPart(2)) {
+				t->getController(k)->toggleMute();
+			}
+		}
+		return;
+	}
+
 	// check what to to with the incoming message based on the start of the path:
 	if (msg.pathStartsWith("/s2l/enabled/toggle")) {
 		// toggle OSC trigger output state:
@@ -53,6 +81,15 @@ void OSCMapping::handleMessage(OSCMessage msg)
 	} else if (msg.pathStartsWith("/s2l/level_feedback")) {
 		// set OSC level feedback state:
 		m_controller->enableOscLevelFeedback(msg.isTrue());
+	} else if (msg.pathStartsWith("/s2l/preset/save")) {
+		// save the current settings as preset with the given name:
+		if (msg.arguments().size() == 1) {
+			QVariant arg = msg.arguments().first();
+			if (arg.type() == QVariant::String && !arg.toString().isEmpty()) {
+				QString presetDir = m_controller->getPresetDirectory() + "/";
+				m_controller->savePresetAs(presetDir + arg.toString() + ".s2l");
+			}
+		}
 	} else if (msg.pathStartsWith("/s2l/preset")) {
 		// load preset if first argument is a string:
 		if (msg.arguments().size() == 1) {
@@ -138,4 +175,7 @@ void OSCMapping::sendCurrentState()
 
     // BPM Range
     m_controller->sendOscMessage("/s2l/out/bpm/range", QString::number(m_controller->getMinBPM()), true);
+    // Multitrack state
+    m_controller->sendOscMessage("/s2l/out/track_count", QString::number(m_controller->getTrackCount()), true);
+    m_controller->sendOscMessage("/s2l/out/track", QString::number(m_controller->getCurrentTrack() + 1), true);
 }

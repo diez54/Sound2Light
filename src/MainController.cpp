@@ -20,7 +20,6 @@
 
 #include "MainController.h"
 
-#include "QAudioInputWrapper.h"
 #include "TriggerGenerator.h"
 #include "TriggerGuiController.h"
 #include "OSCNetworkManager.h"
@@ -38,45 +37,44 @@
 
 MainController::MainController(QQmlApplicationEngine* qmlEngine, QObject *parent)
 	: QObject(parent)
+	, m_bassController(nullptr)
+	, m_loMidController(nullptr)
+	, m_hiMidController(nullptr)
+	, m_highController(nullptr)
+	, m_envelopeController(nullptr)
+	, m_silenceController(nullptr)
 	, m_qmlEngine(qmlEngine)
-    , m_buffer(NUM_SAMPLES*4) // more buffer so the bpm detector can get overlaping data
-    , m_audioInput(nullptr)
-	, m_fft(m_buffer, m_triggerContainer)
 	, m_osc()
+	, m_tracks()
+	, m_trackCount(5)
+	, m_currentTrack(0)
+	, m_multitrackOscEnabled(true)
+	, m_audioInput(nullptr)
 	, m_consoleType("Eos")
+	, m_presetChangedButNotSaved(false)
 	, m_oscMapping(this)
-    , m_lowSoloMode(false)
-    , m_bpmOSC(m_osc)
-    , m_bpm(m_buffer, &m_bpmOSC)
-    , m_bpmTap(&m_bpmOSC)
-    , m_bpmActive(false)
-    , m_waveformVisible(true)
-    , m_autoBpm(false)
 {
-	m_audioInput = new QAudioInputWrapper(&m_buffer);
+	m_audioInput = new MultiChannelInput(this);
 
-	initializeGenerators();
-	connectGeneratorsWithGui();
+	// create all tracks up front (only the first m_trackCount are processed):
+	for (int i=0; i<MAX_TRACKS; ++i) {
+		Track* t = new Track(i, &m_osc);
+		m_tracks.append(t);
+		for (int k=0; k<NUM_TRIGGERS; ++k) {
+			connect(t->getController(k), SIGNAL(presetChanged()), this, SLOT(onPresetChanged()));
+		}
+	}
+
+	bindCurrentTrackToGui();
 }
 
 MainController::~MainController()
 {
-	// delete all objects created on Heap:
-    delete m_audioInput; m_audioInput = nullptr;
-
-    delete m_bass; m_bass = nullptr;
-    delete m_loMid; m_loMid = nullptr;
-    delete m_hiMid; m_hiMid = nullptr;
-    delete m_high; m_high = nullptr;
-    delete m_envelope; m_envelope = nullptr;
-    delete m_silence; m_silence = nullptr;
-
-    delete m_bassController; m_bassController = nullptr;
-    delete m_loMidController; m_loMidController = nullptr;
-    delete m_hiMidController; m_hiMidController = nullptr;
-    delete m_highController; m_highController = nullptr;
-    delete m_envelopeController; m_envelopeController = nullptr;
-    delete m_silenceController; m_silenceController = nullptr;
+	m_fftUpdateTimer.stop();
+	m_bpmUpdatetimer.stop();
+	delete m_audioInput; m_audioInput = nullptr;
+	qDeleteAll(m_tracks);
+	m_tracks.clear();
 }
 
 void MainController::initBeforeQmlIsLoaded()
@@ -111,55 +109,180 @@ void MainController::initAfterQmlIsLoaded()
 	connect(getMainWindow(), SIGNAL(visibilityChanged(QWindow::Visibility)), this, SLOT(onVisibilityChanged()));
 }
 
-void MainController::initializeGenerators()
-{
-	// create TriggerGenerator objects:
-	m_bass = new TriggerGenerator("bass", &m_osc, true, false, 80);
-	m_loMid = new TriggerGenerator("loMid", &m_osc, true, false, 400);
-	m_hiMid = new TriggerGenerator("hiMid", &m_osc, true, false, 1000);
-	m_high = new TriggerGenerator("high", &m_osc, true, false, 5000);
-	m_envelope = new TriggerGenerator("envelope", &m_osc, false);
-	m_silence = new TriggerGenerator("silence", &m_osc, false, true);
+// ------------------------------- Multitrack -----------------------------------
 
-	// append triggerGenerators to triggerContainer:
-	// (container is used to access all generators at once)
-    // order is important because of lowSoloMode
-	m_triggerContainer.append(m_bass);
-	m_triggerContainer.append(m_loMid);
-	m_triggerContainer.append(m_hiMid);
-	m_triggerContainer.append(m_high);
-	m_triggerContainer.append(m_envelope);
-	m_triggerContainer.append(m_silence);
+void MainController::bindCurrentTrackToGui()
+{
+	Track* t = cur();
+	m_bassController = t->getController(0);
+	m_loMidController = t->getController(1);
+	m_hiMidController = t->getController(2);
+	m_highController = t->getController(3);
+	m_envelopeController = t->getController(4);
+	m_silenceController = t->getController(5);
+
+	// make the controllers accessible in QML, i.e. as "bassController":
+	QQmlContext* ctx = m_qmlEngine->rootContext();
+	ctx->setContextProperty("bassController", m_bassController);
+	ctx->setContextProperty("loMidController", m_loMidController);
+	ctx->setContextProperty("hiMidController", m_hiMidController);
+	ctx->setContextProperty("highController", m_highController);
+	ctx->setContextProperty("envelopeController", m_envelopeController);
+	ctx->setContextProperty("silenceController", m_silenceController);
 }
 
-void MainController::connectGeneratorsWithGui()
+void MainController::notifyGuiOfTrackSettings()
 {
-	// create TriggerGuiController objects
-	// and initialize them with the correct triggerGenerators:
-	m_bassController = new TriggerGuiController(m_bass);
-	m_loMidController = new TriggerGuiController(m_loMid);
-	m_hiMidController = new TriggerGuiController(m_hiMid);
-	m_highController = new TriggerGuiController(m_high);
-	m_envelopeController = new TriggerGuiController(m_envelope);
-	m_silenceController = new TriggerGuiController(m_silence);
+	emit decibelConversionChanged();
+	emit agcEnabledChanged();
+	emit gainChanged();
+	emit compressionChanged();
+	emit lowSoloModeChanged();
+	emit bpmActiveChanged();
+	emit autoBpmChanged();
+	emit bpmRangeChanged();
+	emit waveformVisibleChanged();
+	emit bpmMuteChanged();
 
-	// set a QML context property for each
-	// so that for example the m_bassController is accessible as "bassController" in QML:
-	m_qmlEngine->rootContext()->setContextProperty("bassController", m_bassController);
-	m_qmlEngine->rootContext()->setContextProperty("loMidController", m_loMidController);
-	m_qmlEngine->rootContext()->setContextProperty("hiMidController", m_hiMidController);
-	m_qmlEngine->rootContext()->setContextProperty("highController", m_highController);
-	m_qmlEngine->rootContext()->setContextProperty("envelopeController", m_envelopeController);
-	m_qmlEngine->rootContext()->setContextProperty("silenceController", m_silenceController);
+	for (int k=0; k<NUM_TRIGGERS; ++k) {
+		TriggerGuiController* c = cur()->getController(k);
+		emit c->parameterChanged();
+		emit c->oscLabelTextChanged();
+		emit c->muteChanged();
+		emit c->activeChanged();
+	}
+}
 
-	// connect the presetChanged signal to the onPresetChanged slot of this controller:
-	connect(m_bassController, SIGNAL(presetChanged()), this, SLOT(onPresetChanged()));
-	connect(m_loMidController, SIGNAL(presetChanged()), this, SLOT(onPresetChanged()));
-	connect(m_hiMidController, SIGNAL(presetChanged()), this, SLOT(onPresetChanged()));
-	connect(m_highController, SIGNAL(presetChanged()), this, SLOT(onPresetChanged()));
-	connect(m_envelopeController, SIGNAL(presetChanged()), this, SLOT(onPresetChanged()));
-	connect(m_silenceController, SIGNAL(presetChanged()), this, SLOT(onPresetChanged()));
+void MainController::setTrackCount(int value)
+{
+	value = qBound(1, value, MAX_TRACKS);
+	if (value == m_trackCount) return;
+	m_trackCount = value;
+	if (m_currentTrack >= m_trackCount) setCurrentTrack(m_trackCount - 1);
+	emit trackCountChanged();
+	emit presetChanged();
+	m_osc.sendMessage("/s2l/out/track_count", QString::number(m_trackCount), true);
+}
 
+void MainController::setCurrentTrack(int index)
+{
+	index = qBound(0, index, m_trackCount - 1);
+	if (index == m_currentTrack) return;
+	m_currentTrack = index;
+	bindCurrentTrackToGui();
+	notifyGuiOfTrackSettings();
+	emit currentTrackChanged();
+	m_osc.sendMessage("/s2l/out/track", QString::number(m_currentTrack + 1), true);
+}
+
+QString MainController::getInputInfo() const
+{
+	if (!m_audioInput || m_audioInput->getChannelCount() <= 0) {
+		QString err = m_audioInput ? m_audioInput->getLastError() : QString();
+		return err.isEmpty() ? QString("Pas d'entrée audio") : QString("Erreur audio : %1").arg(err);
+	}
+	QString info = QString("%1 · %2 canaux · %3 Hz")
+			.arg(m_audioInput->getApiName())
+			.arg(m_audioInput->getChannelCount())
+			.arg(m_audioInput->getDeviceSampleRate());
+	if (m_audioInput->getDeviceSampleRate() != ANALYSIS_SAMPLE_RATE) info += " → 44100";
+	return info;
+}
+
+QString MainController::getTrackName(int index) const
+{
+	Track* t = track(index);
+	if (!t) return QString();
+	return t->getName().isEmpty() ? t->getDefaultName() : t->getName();
+}
+
+void MainController::setTrackName(int index, const QString& name)
+{
+	Track* t = track(index);
+	if (!t) return;
+	t->setName(name);
+	emit trackNamesChanged();
+	emit presetChanged();
+}
+
+int MainController::getTrackChannel(int index) const
+{
+	Track* t = track(index);
+	return t ? t->getInputChannel() : 0;
+}
+
+void MainController::setTrackChannel(int index, int channel)
+{
+	Track* t = track(index);
+	if (!t) return;
+	t->setInputChannel(channel);
+	emit trackChannelsChanged();
+	emit presetChanged();
+}
+
+QList<qreal> MainController::getTrackLevels(int index) const
+{
+	QList<qreal> levels;
+	Track* t = track(index);
+	if (!t) return levels;
+	for (int k=0; k<NUM_TRIGGERS; ++k) levels.append(t->getLevel(k));
+	return levels;
+}
+
+QList<bool> MainController::getTrackActives(int index) const
+{
+	QList<bool> actives;
+	Track* t = track(index);
+	if (!t) return actives;
+	for (int k=0; k<NUM_TRIGGERS; ++k) actives.append(t->getTriggerActive(k));
+	return actives;
+}
+
+QList<qreal> MainController::getChannelPeaks()
+{
+	QList<qreal> peaks;
+	for (float p : m_audioInput->takeChannelPeaks()) peaks.append(p);
+	return peaks;
+}
+
+int MainController::getTrackBpm(int index) const
+{
+	Track* t = track(index);
+	if (!t || !(t->m_bpmActive || t->getBpmTap().hasBpm())) return 0;
+	return qRound(t->getCurrentBpm());
+}
+
+void MainController::setMultitrackOscEnabled(bool value)
+{
+	if (value == m_multitrackOscEnabled) return;
+	m_multitrackOscEnabled = value;
+	emit multitrackOscEnabledChanged();
+	if (value) {
+		for (int i=0; i<m_trackCount; ++i) m_tracks[i]->sendMultitrackOutput(m_osc, true);
+	}
+}
+
+// ------------------------------- Processing -----------------------------------
+
+void MainController::updateFFT()
+{
+	const QVector<Track*> active = m_tracks.mid(0, m_trackCount);
+	m_audioInput->pump(active);
+	for (Track* t : active) {
+		t->updateFFT();
+	}
+	if (m_multitrackOscEnabled && m_osc.getEnabled()) {
+		for (Track* t : active) {
+			t->sendMultitrackOutput(m_osc);
+		}
+	}
+}
+
+void MainController::updateBPM()
+{
+	for (int i=0; i<m_trackCount; ++i) {
+		m_tracks[i]->updateBPM();
+	}
 }
 
 QQuickWindow *MainController::getMainWindow() const
@@ -214,36 +337,45 @@ void MainController::initAudioInput()
 	}
 
 	// start FFT update timer:
-	connect(&m_fftUpdateTimer, SIGNAL(timeout()), this, SLOT(updateFFT()));
+	connect(&m_fftUpdateTimer, SIGNAL(timeout()), this, SLOT(updateFFT()), Qt::UniqueConnection);
+	m_fftUpdateTimer.setTimerType(Qt::PreciseTimer);
 	m_fftUpdateTimer.start(1000.0 / FFT_UPDATE_RATE);
 
-    // set up the BPM timer and start it
-    connect(&m_bpmUpdatetimer, SIGNAL(timeout()), this, SLOT(updateBPM()));
-    setBPMActive(m_bpmActive);
+	// the BPM timer runs all the time, each track decides if it detects BPM:
+	connect(&m_bpmUpdatetimer, SIGNAL(timeout()), this, SLOT(updateBPM()), Qt::UniqueConnection);
+	m_bpmUpdatetimer.start(1000.0 / BPM_UPDATE_RATE);
 }
+
+void MainController::setInputByName(const QString& name)
+{
+	m_audioInput->setInputByName(name);
+	emit inputChanged();
+	emit presetChanged();
+}
+
+// ------------------------------- BPM (current track) -----------------------------------
 
 void MainController::triggerBeat()
 {
-    setAutoBpm(false);
-    m_bpmTap.triggerBeat();
+	setAutoBpm(false);
+	cur()->getBpmTap().triggerBeat();
 }
 
 void MainController::setBPM(float value)
 {
-    setAutoBpm(false);
-    m_bpmTap.setBpm(value);
+	setAutoBpm(false);
+	cur()->getBpmTap().setBpm(value);
 }
 
 void MainController::activateBPM()
 {
-    m_bpm.resetCache();
-    m_bpmTap.reset();
-    m_bpmUpdatetimer.start(1000.0 / BPM_UPDATE_RATE);
+	cur()->getBpm().resetCache();
+	cur()->getBpmTap().reset();
 }
 
 void MainController::deactivateBPM()
 {
-    m_bpmUpdatetimer.stop();
+	// nothing to do: the track stops detecting when m_bpmActive is false
 }
 
 void MainController::setConsoleType(QString value)
@@ -260,7 +392,7 @@ QList<qreal> MainController::getSpectrumPoints()
 {
 	// convert const QVector<float>& to QList<qreal> to be used in GUI:
 	QList<qreal> points;
-	const QVector<float>& spectrum = m_fft.getNormalizedSpectrum();
+	const QVector<float>& spectrum = cur()->getFft().getNormalizedSpectrum();
 	for (int i=0; i<spectrum.size(); ++i) {
 		points.append(spectrum[i]);
 	}
@@ -269,35 +401,34 @@ QList<qreal> MainController::getSpectrumPoints()
 
 QList<qreal> MainController::getWavePoints()
 {
-    // convert const QVector<float>& to QList<qreal> to be used in GUI:
-    QList<qreal> points;
-    const Qt3DCore::QCircularBuffer<float>& wave = m_bpm.getWaveDisplay();
-    for (int i = 0; i < wave.size(); ++i) {
-        points.append(wave.at(i) / 350 * m_fft.getScaledSpectrum().getGain());
-    }
-    return points;
+	// convert const QVector<float>& to QList<qreal> to be used in GUI:
+	QList<qreal> points;
+	const Qt3DCore::QCircularBuffer<float>& wave = cur()->getBpm().getWaveDisplay();
+	const qreal gain = cur()->getFft().getScaledSpectrum().getGain();
+	for (int i = 0; i < wave.size(); ++i) {
+		points.append(wave.at(i) / 350 * gain);
+	}
+	return points;
 }
 
 QList<bool> MainController::getWaveOnsets()
 {
-    // conert const QVector<bool>& to QList<bool> to be used in GUI:
-    QList<bool> points;
-    const QVector<bool>& peaks = m_bpm.getOnsets();
-    for (int i = 0; i < peaks.size(); ++i) {
-        points.append(peaks[i]);
-    }
-    return points;
+	QList<bool> points;
+	const QVector<bool>& peaks = cur()->getBpm().getOnsets();
+	for (int i = 0; i < peaks.size(); ++i) {
+		points.append(peaks[i]);
+	}
+	return points;
 }
 
 QList<QString> MainController::getWaveColors()
 {
-    // convert const QVector<QColoer>& to QList<QString> to be used in GUI:
-    QList<QString> points;
-    const Qt3DCore::QCircularBuffer<QColor>& colors = m_bpm.getWaveColors();
-    for (int i = 0; i < colors.size(); ++i) {
-        points.append(colors.at(i).name());
-    }
-    return points;
+	QList<QString> points;
+	const Qt3DCore::QCircularBuffer<QColor>& colors = cur()->getBpm().getWaveColors();
+	for (int i = 0; i < colors.size(); ++i) {
+		points.append(colors.at(i).name());
+	}
+	return points;
 }
 
 void MainController::setOscEnabled(bool value) {
@@ -305,76 +436,64 @@ void MainController::setOscEnabled(bool value) {
 	m_osc.sendMessage(QString("/s2l/out/enabled=").append(value ? "1" : "0"), true);
 }
 
-// enable or disables bpm detection
+// enable or disables bpm detection of the current track
 void MainController::setBPMActive(bool value) {
-    if (value == m_bpmActive) return;
-    m_bpmActive = value;
-    if (m_bpmActive) {
-        activateBPM();
-    } else {
-        deactivateBPM();
-    }
-    emit bpmActiveChanged();
-    emit waveformVisibleChanged(); // because wavformvisible is only true if bpm is active
-    m_osc.sendMessage("/s2l/out/bpm/enabled", (value ? "1" : "0"), true);
+	Track* t = cur();
+	if (value == t->m_bpmActive) return;
+	t->m_bpmActive = value;
+	if (value) activateBPM();
+	emit bpmActiveChanged();
+	emit waveformVisibleChanged(); // because wavformvisible is only true if bpm is active
+	m_osc.sendMessage(QString("/s2l/out/ch%1/bpm/enabled").arg(t->getIndex() + 1), (value ? "1" : "0"), true);
 }
 
 void MainController::setAutoBpm(bool value) {
-    if (value == m_autoBpm) return;
-    m_autoBpm = value;
-    qDebug() << m_autoBpm;
-    m_bpm.setTransmitBpm(m_autoBpm);
-    if (m_autoBpm && !m_bpmActive) {
-        setBPMActive(true);
-    } else if (!m_autoBpm && !m_waveformVisible && m_bpmActive) {
-        setBPMActive(false);
-    }
-    emit autoBpmChanged();
+	Track* t = cur();
+	if (value == t->m_autoBpm) return;
+	t->m_autoBpm = value;
+	t->getBpm().setTransmitBpm(value);
+	if (t->m_autoBpm && !t->m_bpmActive) {
+		setBPMActive(true);
+	} else if (!t->m_autoBpm && !t->m_waveformVisible && t->m_bpmActive) {
+		setBPMActive(false);
+	}
+	emit autoBpmChanged();
 }
 
 // sets the minium bpm of the range
 void MainController::setMinBPM(int value) {
-    m_bpm.setMinBPM(value);
-    m_bpmTap.setMinBPM(value);
-    emit bpmRangeChanged();
-    m_osc.sendMessage("/s2l/out/bpm/range", QString::number(value), true);
+	cur()->getBpm().setMinBPM(value);
+	cur()->getBpmTap().setMinBPM(value);
+	emit bpmRangeChanged();
+	m_osc.sendMessage(QString("/s2l/out/ch%1/bpm/range").arg(cur()->getIndex() + 1), QString::number(value), true);
 }
 
 void MainController::setWaveformVisible(bool value) {
-    m_waveformVisible = value;
-    if (m_waveformVisible && !m_bpmActive) {
-        setBPMActive(true);
-    } else if (!m_autoBpm && !m_waveformVisible && m_bpmActive) {
-        setBPMActive(false);
-    }
-    emit waveformVisibleChanged();
+	Track* t = cur();
+	t->m_waveformVisible = value;
+	if (t->m_waveformVisible && !t->m_bpmActive) {
+		setBPMActive(true);
+	} else if (!t->m_autoBpm && !t->m_waveformVisible && t->m_bpmActive) {
+		setBPMActive(false);
+	}
+	emit waveformVisibleChanged();
 }
 
 void MainController::onExit()
 {
-    savePresetIndependentSettings();
-    autosave();
+	savePresetIndependentSettings();
+	autosave();
 }
 
 void MainController::onVisibilityChanged()
 {
 	// if main Window is minimized:
 	if (getMainWindow()->visibility() == QWindow::Minimized) {
-		// iterate over all open dialogs:
+		// close all open dialogs (QML dialogs can't be minimized):
 		QMap<QString, QObject*>::iterator i = m_dialogs.begin();
 		for (; i != m_dialogs.end(); ++i) {
-			// check if dialog exists:
 			if (!i.value()) continue;
-			// check if it should be minimized or closed:
-			if (i.value()->property("modality").toInt() == Qt::NonModal) {
-				// a non modal dialog will be minimized together with the main window:
-				// FIXME: is a QML Dialog minimizable?
-				// it seems it is not, it will be closed instead:
-				QMetaObject::invokeMethod(i.value(), "close");
-			} else {
-				// a modal dialog will be closed when the main window is minimized:
-				QMetaObject::invokeMethod(i.value(), "close");
-			}
+			QMetaObject::invokeMethod(i.value(), "close");
 		}
 	}
 }
@@ -393,13 +512,14 @@ void MainController::savePresetIndependentSettings() const
 	independentSettings.setValue("oscIsEnabled", getOscEnabled());
 	independentSettings.setValue("oscUseTcp", getUseTcp());
 	independentSettings.setValue("oscUse_1_1", getUseOsc_1_1());
-    QRect windowGeometry = getMainWindow()->geometry();
-    if (windowGeometry.width() < 300) {
-        // -> minimal mode, save default geometry
-        windowGeometry.setWidth(1200);
-        windowGeometry.setHeight(800);
-    }
-    independentSettings.setValue("windowGeometry", windowGeometry);
+	independentSettings.setValue("multitrackOscEnabled", m_multitrackOscEnabled);
+	QRect windowGeometry = getMainWindow()->geometry();
+	if (windowGeometry.width() < 300) {
+		// -> minimal mode, save default geometry
+		windowGeometry.setWidth(1200);
+		windowGeometry.setHeight(860);
+	}
+	independentSettings.setValue("windowGeometry", windowGeometry);
 	bool maximized = (getMainWindow()->width() == QGuiApplication::primaryScreen()->availableSize().width());
 	independentSettings.setValue("maximized", maximized);
 	independentSettings.setValue("inputDeviceName", getActiveInputName());
@@ -426,6 +546,7 @@ void MainController::loadPresetIndependentSettings()
 	setOscEnabled(independentSettings.value("oscIsEnabled").toBool());
 	setUseTcp(independentSettings.value("oscUseTcp").toBool());
 	setUseOsc_1_1(independentSettings.value("oscUse_1_1").toBool());
+	setMultitrackOscEnabled(independentSettings.value("multitrackOscEnabled", true).toBool());
 	if (independentSettings.value("oscLogSettingsValid").toBool()) {
 		enableOscLogging(independentSettings.value("oscLogIncomingIsEnabled").toBool(), independentSettings.value("oscLogOutgoingIsEnabled").toBool());
 	} else {
@@ -451,19 +572,21 @@ void MainController::restoreWindowGeometry()
 	if (!windowGeometry.isNull()) window->setGeometry(windowGeometry);
 	if (maximized) window->showMaximized();
 	connect(window, SIGNAL(closing(QQuickCloseEvent*)), m_qmlEngine, SIGNAL(quit()));
-
-	// TODO: restore visibility of details in trigger settings
-	// TODO: restore position of splitView handle
 }
+
+// ------------------------------- Presets -----------------------------------
 
 void MainController::loadPreset(const QString &constFileName, bool createIfNotExistent)
 {
 	// prepare the filename:
 	QString fileName(constFileName);
 	// fileName returned from FileDialog starts with "file:///"
-	// this has to be removed:
 	if (fileName.startsWith("file:///")) {
+#ifdef Q_OS_WIN
 		fileName = fileName.remove(0, 8);
+#else
+		fileName = fileName.remove(0, 7);
+#endif
 	}
 
 	// check if file exists:
@@ -477,33 +600,33 @@ void MainController::loadPreset(const QString &constFileName, bool createIfNotEx
 	// do not restore anything if the format is not valid (or the file is new):
 	if (!settingsFormatIsValid(settings)) return;
 
-	// restore all general, not independent settings from the preset file:
-	setDecibelConversion(settings.value("dbConversion").toBool());
-	setFftGain(settings.value("fftGain").toReal());
-	setFftCompression(settings.value("fftCompression").toReal());
-	setAgcEnabled(settings.value("agcEnabled").toBool());
 	setConsoleType(settings.value("consoleType").toString());
-    setLowSoloMode(settings.value("lowSoloMode").toBool());
-    setBPMActive(settings.value("bpm/Active", false).toBool());
-    setAutoBpm(settings.value("autoBpm", false).toBool());
-    setWaveformVisible(settings.value("waveformVisible", true).toBool());
 
-	// restore the settings in all TriggerGenerators:
-	for (int i=0; i<m_triggerContainer.size(); ++i) {
-		m_triggerContainer[i]->restore(settings);
+	if (settings.value("multitrackFormat", 0).toInt() >= 1) {
+		// --- multitrack preset ---
+		m_trackCount = qBound(1, settings.value("trackCount", 5).toInt(), MAX_TRACKS);
+		for (int i=0; i<MAX_TRACKS; ++i) {
+			const QString group = QString("track%1").arg(i + 1);
+			if (settings.childGroups().contains(group)) {
+				settings.beginGroup(group);
+				m_tracks[i]->restore(settings);
+				settings.endGroup();
+			} else {
+				m_tracks[i]->reset();
+			}
+		}
+		const int current = qBound(0, settings.value("currentTrack", 0).toInt(), m_trackCount - 1);
+		m_currentTrack = current;
+	} else {
+		// --- preset of the original single track Sound2Light: goes to track 1 ---
+		for (int i=1; i<MAX_TRACKS; ++i) m_tracks[i]->reset();
+		m_tracks[0]->restore(settings);
+		m_tracks[0]->setInputChannel(-1);  // original behaviour: mix of all channels
+		m_trackCount = 1;
+		m_currentTrack = 0;
 	}
 
-    // Restore the settings in the BPMDetector (from here to keep BPM Detector modular)
-    setMinBPM(settings.value("bpm/Min", 75).toInt());
-
-    // Restore the settings in the BPMOscController
-    m_bpmOSC.restore(settings);
-
-    // Restore the manual BPM
-    m_bpmTap.setBpm(settings.value("bpm/tapvalue", 60).toInt());
-
-    m_bpmOSC.setBPMMute(settings.value("bpm/mute", false).toBool());
-
+	bindCurrentTrackToGui();
 
 	// this is now the loaded preset, update the preset name:
 	m_currentPresetFilename = fileName; emit presetNameChanged();
@@ -514,35 +637,11 @@ void MainController::loadPreset(const QString &constFileName, bool createIfNotEx
 	m_osc.sendMessage("/s2l/out/error", "-", true);
 
 	// notify the GUI of the changes:
-	emit decibelConversionChanged();
-	emit agcEnabledChanged();
-	emit gainChanged();
-	emit compressionChanged();
-    emit bpmActiveChanged();
-    emit bpmRangeChanged();
-    emit waveformVisibleChanged();
-    emit bpmMuteChanged();
-
-	emit m_bassController->parameterChanged();
-	emit m_loMidController->parameterChanged();
-	emit m_hiMidController->parameterChanged();
-	emit m_highController->parameterChanged();
-	emit m_envelopeController->parameterChanged();
-	emit m_silenceController->parameterChanged();
-
-	emit m_bassController->oscLabelTextChanged();
-	emit m_loMidController->oscLabelTextChanged();
-	emit m_hiMidController->oscLabelTextChanged();
-	emit m_highController->oscLabelTextChanged();
-	emit m_envelopeController->oscLabelTextChanged();
-	emit m_silenceController->oscLabelTextChanged();
-
-    emit m_bassController->muteChanged();
-    emit m_loMidController->muteChanged();
-    emit m_hiMidController->muteChanged();
-    emit m_highController->muteChanged();
-    emit m_envelopeController->muteChanged();
-    emit m_silenceController->muteChanged();
+	emit trackCountChanged();
+	emit currentTrackChanged();
+	emit trackNamesChanged();
+	emit trackChannelsChanged();
+	notifyGuiOfTrackSettings();
 }
 
 void MainController::savePresetAs(const QString &constFileName, bool isAutosave)
@@ -550,47 +649,35 @@ void MainController::savePresetAs(const QString &constFileName, bool isAutosave)
 	if (constFileName.isEmpty()) return;
 	// prepare the filename:
 	QString fileName(constFileName);
-	// fileName returned from FileDialog starts with "file:///"
-	// this has to be removed:
 	if (fileName.startsWith("file:///")) {
+#ifdef Q_OS_WIN
 		fileName = fileName.remove(0, 8);
+#else
+		fileName = fileName.remove(0, 7);
+#endif
 	}
 	// all preset files have to end on ".s2l":
 	if (!fileName.toLower().endsWith(".s2l") && !isAutosave) {
 		fileName = fileName + ".s2l";
 	}
 
-	// save all general, not independent settings to the preset file:
 	QSettings settings(fileName, QSettings::IniFormat);
+	settings.clear();  // remove keys of older formats
 	settings.setValue("version", VERSION_STRING);
 	settings.setValue("formatVersion", SETTINGS_FORMAT_VERSION);
+	settings.setValue("multitrackFormat", 1);
 	settings.setValue("changedAt", QDateTime::currentDateTime().toString());
-	settings.setValue("dbConversion", getDecibelConversion());
-	settings.setValue("fftGain", getFftGain());
-	settings.setValue("fftCompression", getFftCompression());
-	settings.setValue("agcEnabled", getAgcEnabled());
 	settings.setValue("consoleType", getConsoleType());
-    settings.setValue("lowSoloMode", getLowSoloMode());
-    settings.setValue("bpm/Active", getBPMActive());
-    settings.setValue("autoBpm", getAutoBpm());
-    settings.setValue("waveformVisible", m_waveformVisible); // store property because getter is for GUI, and only returns true if bpm is active
+	settings.setValue("trackCount", m_trackCount);
+	settings.setValue("currentTrack", m_currentTrack);
 
-	// save the settings in all TriggerGenerators:
-	for (int i=0; i<m_triggerContainer.size(); ++i) {
-		m_triggerContainer[i]->save(settings);
+	// all tracks are saved, also the inactive ones, so that nothing is lost
+	// when the number of tracks is reduced temporarily:
+	for (int i=0; i<MAX_TRACKS; ++i) {
+		settings.beginGroup(QString("track%1").arg(i + 1));
+		m_tracks[i]->save(settings);
+		settings.endGroup();
 	}
-
-    // save the settings in the BPMDetector (from here to keep BPM Detector modular)
-    settings.setValue("bpm/Min", m_bpm.getMinBPM());
-
-    // save the settings in the BPMOscController
-    m_bpmOSC.save(settings);
-
-    // save the manual BPM
-    settings.setValue("bpm/tapvalue", m_bpmTap.getBpm());
-
-    // save bpm mute
-    settings.setValue("bpm/mute", m_bpmOSC.getBPMMute());
 
 	if (!isAutosave) {
 		// this is now the loaded preset, update the preset name:
@@ -626,7 +713,6 @@ void MainController::restorePreset()
 		m_presetChangedButNotSaved = independentSettings.value("presetChangedButNotSaved").toBool();
 	} else if (QFile(presetFileName).exists()) {
 		// there was a preset and it does exist
-		// this is now the loaded preset, update the preset name:
 		m_currentPresetFilename = presetFileName;
 		m_presetChangedButNotSaved = independentSettings.value("presetChangedButNotSaved").toBool();
 	} else {
@@ -641,28 +727,17 @@ void MainController::restorePreset()
 
 void MainController::resetPreset()
 {
-	// reset all values to default:
-	setFftGain(1.0);
-	setFftCompression(1.0);
-	setAgcEnabled(true);
-	setDecibelConversion(false);
-    setLowSoloMode(false);
-    setBPMActive(false);
-    setMinBPM(75);
-    setBPMOscCommands(QStringList());
-    setWaveformVisible(true);
+	// reset all tracks to default:
+	for (Track* t : m_tracks) t->reset();
+	m_trackCount = 5;
+	m_currentTrack = 0;
+	bindCurrentTrackToGui();
 
-    emit bpmActiveChanged();
-    emit bpmRangeChanged();
-    emit waveformVisibleChanged();
-
-	// reset values in all TriggerGuiControllers:
-	m_bassController->resetParameters();
-	m_loMidController->resetParameters();
-	m_hiMidController->resetParameters();
-	m_highController->resetParameters();
-	m_envelopeController->resetParameters();
-	m_silenceController->resetParameters();
+	emit trackCountChanged();
+	emit currentTrackChanged();
+	emit trackNamesChanged();
+	emit trackChannelsChanged();
+	notifyGuiOfTrackSettings();
 
 	// clear currentPresetFilename:
 	m_currentPresetFilename = ""; emit presetNameChanged();
@@ -677,7 +752,6 @@ void MainController::deletePreset(const QString &fileName)
 	}
 
 	QFile file(fileName);
-	// delete the file:
 	if (file.exists()) {
 		file.remove();
 	}
@@ -711,7 +785,6 @@ void MainController::openDialog(const QString &qmlDialogFile, QString propertyNa
 {
 	// check if dialog is already opened:
 	if (m_dialogs.find(qmlDialogFile) != m_dialogs.end()) {
-		// dialog is open
 		QObject* dialog = m_dialogs[qmlDialogFile];
 		if (dialog && dialog->property("visible").toBool()) {
 			dialog->setProperty("visible", false);
@@ -733,11 +806,8 @@ void MainController::openDialog(const QString &qmlDialogFile, QString propertyNa
 void MainController::dialogIsClosed(QObject *dialog)
 {
 	if (!dialog) return;
-	// remove dialog from open dialogs map:
 	QString qmlDialogFile = m_dialogs.key(dialog);
 	m_dialogs.remove(qmlDialogFile);
-	// delete dialog object:
-	// FIXME: assertion error when deleting dialog
 	dialog->deleteLater();
 }
 
@@ -755,19 +825,15 @@ bool MainController::oscLevelFeedbackIsEnabled()
 void MainController::enableOscLevelFeedback(bool value)
 {
 	if (value) {
-		// start OSC level feedback timer:
 		m_oscUpdateTimer.start(1000.0 / OSC_LEVEL_FEEDBACK_RATE);
 	} else {
-		// stop OSC level feedback timer:
 		m_oscUpdateTimer.stop();
 	}
-	// give feedback about state via OSC:
 	m_osc.sendMessage(QString("/s2l/out/level_feedback=").append(value ? "1" : "0"), true);
 }
 
 void MainController::openSavePresetAsDialog()
 {
-	// open QWidget based dialog and wait for result (blocking):
 	QString fileName = QFileDialog::getSaveFileName(0, tr("Save Preset As"),
 							   getPresetDirectory(),
 							   tr("Sound2Light Presets (*.s2l)"));
@@ -776,7 +842,6 @@ void MainController::openSavePresetAsDialog()
 
 void MainController::openLoadPresetDialog()
 {
-	// open QWidget based dialog and wait for result (blocking):
 	QString fileName = QFileDialog::getOpenFileName(0, tr("Open Preset"),
 							   getPresetDirectory(),
 							   tr("Sound2Light Presets (*.s2l)"));

@@ -43,12 +43,12 @@ void TriggerOscParameters::save(const QString name, QSettings &settings) const
 
 void TriggerOscParameters::restore(const QString name, QSettings &settings)
 {
-	setOnMessage(settings.value(name + "/osc/onMessage").toString());
-	setOffMessage(settings.value(name + "/osc/offMessage").toString());
-	setLevelMessage(settings.value(name + "/osc/levelMessage").toString());
-	setMinLevelValue(settings.value(name + "/osc/minLevelValue").toReal());
-	setMaxLevelValue(settings.value(name + "/osc/maxLevelValue").toReal());
-	setLabelText(settings.value(name + "/osc/labelText").toString());
+	setOnMessage(settings.value(name + "/osc/onMessage", m_onMessage).toString());
+	setOffMessage(settings.value(name + "/osc/offMessage", m_offMessage).toString());
+	setLevelMessage(settings.value(name + "/osc/levelMessage", m_levelMessage).toString());
+	setMinLevelValue(settings.value(name + "/osc/minLevelValue", m_minLevelValue).toReal());
+	setMaxLevelValue(settings.value(name + "/osc/maxLevelValue", m_maxLevelValue).toReal());
+	setLabelText(settings.value(name + "/osc/labelText", m_labelText).toString());
 }
 
 void TriggerOscParameters::resetParameters()

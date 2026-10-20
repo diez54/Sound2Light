@@ -23,6 +23,7 @@
 BPMOscControler::BPMOscControler(OSCNetworkManager &osc) :
     m_bpmMute(false)
   , m_osc(osc)
+  , m_outPrefix("/s2l/out/")
   , m_oscCommands()
 {
 }
@@ -31,13 +32,13 @@ void BPMOscControler::setBPMMute(bool mute)
 {
     m_bpmMute = mute;
 
-    m_osc.sendMessage("/s2l/out/bpm/mute", (m_bpmMute ? "1" : "0"), true);
+    m_osc.sendMessage(m_outPrefix + "bpm/mute", (m_bpmMute ? "1" : "0"), true);
 }
 
 void BPMOscControler::toggleBPMMute()
 {
     m_bpmMute = !m_bpmMute;
-    m_osc.sendMessage("/s2l/out/bpm/mute", (m_bpmMute ? "1" : "0"), true);
+    m_osc.sendMessage(m_outPrefix + "bpm/mute", (m_bpmMute ? "1" : "0"), true);
 }
 
 // Restore the commands from e.g. a preset or whatever else
@@ -96,5 +97,5 @@ void BPMOscControler::transmitBPM(float bpm)
     }
 
     // Send information command
-    m_osc.sendMessage("/s2l/out/bpm=" + QString::number(qRound(bpm)), true);
+    m_osc.sendMessage(m_outPrefix + "bpm=" + QString::number(qRound(bpm)), true);
 }

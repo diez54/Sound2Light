@@ -83,6 +83,12 @@ public:
 	// returns a reference to the internal TriggerFilter
 	TriggerFilter& getTriggerFilter() override { return m_filter; }
 
+	// sets the OSC path prefix used for feedback messages (default "/s2l/out/")
+	void setOutPrefix(const QString& prefix) { m_outPrefix = prefix; }
+
+	// returns the name of this trigger (i.e. "bass")
+	QString getName() const { return m_name; }
+
 	// returns a reference to the OSC message settings of this trigger
 	TriggerOscParameters& getOscParameters() { return m_oscParameters; }
 
@@ -111,6 +117,7 @@ protected:
     OSCNetworkManager*	m_osc;  // pointer to OSCNetworkManager instance (i.e. of MainController)
 	const bool		m_invert;  // true if signal values should be inverted (i.e. for "silence" trigger)
     bool            m_mute; // true if the band is muted, which will supress OSC Output
+    QString         m_outPrefix; // OSC path prefix for feedback messages
 	int				m_midFreq;  // middle frequency of bandpass in Hz
 	const int		m_defaultMidFreq;  // default midFreq in Hz, used for reset
 	qreal			m_width;  // width of bandpass [0...1]

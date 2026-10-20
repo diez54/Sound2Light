@@ -96,9 +96,9 @@ void TriggerFilter::save(const QString name, QSettings &settings) const
 
 void TriggerFilter::restore(const QString name, QSettings &settings)
 {
-	setOnDelay(settings.value(name + "/onDelay").toReal());
-	setOffDelay(settings.value(name + "/offDelay").toReal());
-	setMaxHold(settings.value(name + "/maxHold").toReal());
+	setOnDelay(settings.value(name + "/onDelay", m_onDelay).toReal());
+	setOffDelay(settings.value(name + "/offDelay", m_offDelay).toReal());
+	setMaxHold(settings.value(name + "/maxHold", m_maxHold).toReal());
 }
 
 void TriggerFilter::onOnDelayEnd()

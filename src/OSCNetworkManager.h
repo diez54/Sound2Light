@@ -131,6 +131,12 @@ public slots:
 	// Sends an OSC message with a string as the only argument
 	void sendMessage(QString path, QString argument, bool forced = false);
 
+	// Sends an OSC message with a single float32 argument
+	void sendFloat(const QString& path, float value, bool forced = false);
+
+	// Sends an OSC message with a single int32 argument
+	void sendInt(const QString& path, int value, bool forced = false);
+
 signals:
 
 	// ------------------- Receive Message --------------------

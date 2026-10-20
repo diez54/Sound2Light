@@ -29,11 +29,11 @@ ApplicationWindow {
 	id: window
 	visible: true
     width: minimalMode ? 160 : 1200
-    height: minimalMode ? 200 : 800
+    height: minimalMode ? 200 : 950
     minimumWidth:  160
     minimumHeight: 200
 
-	title: qsTr("ETC - Sound2Light")
+	title: qsTr("Sound2Light Multitrack")
 
     // the minimal mode property, as an alias from the bpm settings where it is manipulated
     property alias minimalMode: spectrumWithControls.minimalMode
@@ -56,12 +56,36 @@ ApplicationWindow {
         }
     }
 
+    // Ctrl+1 ... Ctrl+9 select the tracks 1 to 9:
+    Repeater {
+        model: 9
+        delegate: Item {
+            Action {
+                shortcut: "Ctrl+" + (index + 1)
+                onTriggered: controller.currentTrack = index
+            }
+        }
+    }
+
 	DarkBlueStripedBackground {}
+
+	// -------------------------- Track Bar (multitrack) ---------------------------
+	TrackBar {
+		id: trackBar
+		anchors.top: parent.top
+		anchors.left: parent.left
+		anchors.right: parent.right
+		visible: !minimalMode
+		height: minimalMode ? 0 : 150
+	}
 
 	// -------------------------- SplitView ---------------------------
 	DarkSplitView {
 		id: splitView
-		anchors.fill: parent
+		anchors.top: trackBar.bottom
+		anchors.left: parent.left
+		anchors.right: parent.right
+		anchors.bottom: parent.bottom
 		orientation: Qt.Vertical
 
 		// -------------------------- Top Area with Spectrum ---------------------------

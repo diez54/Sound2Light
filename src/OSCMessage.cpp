@@ -107,7 +107,7 @@ void OSCMessage::setData(const QByteArray &data, bool convertNumberStrings)
 
 const QString &OSCMessage::pathPart(int index) const
 {
-	Q_ASSERT(index > m_path.size());
+	Q_ASSERT(index < m_path.size());
 	return m_path[index];
 }
 

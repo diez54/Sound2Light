@@ -94,6 +94,7 @@ Row {
                     function updateText() {
                         text =  (controller.presetChangedButNotSaved ? "*" : "")
                                 + (controller.presetName ? controller.presetName : "No Preset")
+                                + "  |  " + (controller.currentTrack + 1) + " · " + controller.getTrackName(controller.currentTrack)
                                 + "  |  '" + controller.getActiveInputName()
                                 + "'  |  " + controller.getOscIpAddress()
                                 + (controller.getUseTcp() ? (":" + controller.getOscTcpPort()) : (" Tx:" + controller.getOscUdpTxPort()))
@@ -106,6 +107,8 @@ Row {
                         onPresetChangedButNotSavedChanged: statusText.updateText()
                         onIsConnectedChanged: statusText.updateText()
                         onAddressChanged: statusText.updateText()
+                        onCurrentTrackChanged: statusText.updateText()
+                        onTrackNamesChanged: statusText.updateText()
                     }
                 }
 

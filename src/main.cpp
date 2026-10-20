@@ -35,8 +35,9 @@ int main(int argc, char *argv[]) {
 	app.setWindowIcon(QIcon(":/images/icons/etcicon.ico"));
 
 	// these parameters are used by QSettings:
-	QCoreApplication::setOrganizationName("ETC");
-	QCoreApplication::setApplicationName("Sound2Light");
+	QCoreApplication::setOrganizationName("Sound2Light");
+	// separate name so the settings do not collide with the original Sound2Light:
+	QCoreApplication::setApplicationName("Sound2Light Multitrack");
 	QSettings::setDefaultFormat(QSettings::IniFormat);
 
 	// ----------- Show Splash Screen --------
