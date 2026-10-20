@@ -61,7 +61,7 @@ Toutes celles de l'original, plus :
 
 ## Installer
 
-- **macOS (Apple Silicon)** : ouvrir le `.dmg`, glisser l'app dans Applications. L'app n'est pas signée par Apple : au premier lancement, clic droit > Ouvrir, ou Réglages Système > Confidentialité et sécurité > « Ouvrir quand même ». Autoriser l'accès au micro, sinon l'entrée reste muette.
+- **macOS** : prendre `Sound2LightMultiTrack-macOS-arm64` pour un Mac Apple Silicon (M1, M2…), `Sound2LightMultiTrack-macOS-intel` pour un Mac Intel (menu Pomme > À propos de ce Mac : « Puce Apple » ou « Processeur Intel »). Ouvrir le `.dmg`, glisser l'app dans Applications. L'app n'est pas signée par Apple : au premier lancement, clic droit > Ouvrir, ou Réglages Système > Confidentialité et sécurité > « Ouvrir quand même ». Autoriser l'accès au micro, sinon l'entrée reste muette.
 - **Windows** : dézipper, lancer `Sound2LightMultiTrack.exe`.
 
 Les réglages sont séparés de ceux du Sound2Light d'origine : les deux peuvent cohabiter.

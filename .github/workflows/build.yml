@@ -13,7 +13,15 @@ permissions:
 jobs:
   # ---------------------------------------------------------------- macOS (Apple Silicon)
   macos:
-    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14        # Apple Silicon (M1, M2, M3, M4...)
+            arch: arm64
+          - runner: macos-15-intel  # older Intel Macs
+            arch: intel
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,12 +44,13 @@ jobs:
           codesign --force --deep --sign - "Sound2LightMultiTrack.app"
           mkdir dmg && cp -R "Sound2LightMultiTrack.app" dmg/
           ln -s /Applications dmg/Applications
-          hdiutil create -volname "Sound2LightMultiTrack" -srcfolder dmg -ov -format UDZO ../Sound2LightMultiTrack-macOS-arm64.dmg
+          hdiutil create -volname "Sound2LightMultiTrack" -srcfolder dmg -ov -format UDZO ../Sound2LightMultiTrack-macOS-${{ matrix.arch }}.dmg
 
       - name: Smoke test (launch the bundled app with the test signal)
         run: |
           cd src
           APP="Sound2LightMultiTrack.app"
+          lipo -archs "$APP/Contents/MacOS/Sound2LightMultiTrack"
           test -d "$APP/Contents/Frameworks/QtQuick.framework"
           test -d "$APP/Contents/PlugIns/platforms"
           ls -d "$APP"/Contents/Resources/qml/QtQuick/Controls
@@ -59,8 +68,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Sound2LightMultiTrack-macOS-arm64
-          path: Sound2LightMultiTrack-macOS-arm64.dmg
+          name: Sound2LightMultiTrack-macOS-${{ matrix.arch }}
+          path: Sound2LightMultiTrack-macOS-${{ matrix.arch }}.dmg
 
   # ---------------------------------------------------------------- Windows (x64)
   windows:
@@ -149,4 +158,5 @@ jobs:
         with:
           files: |
             Sound2LightMultiTrack-macOS-arm64/Sound2LightMultiTrack-macOS-arm64.dmg
+            Sound2LightMultiTrack-macOS-intel/Sound2LightMultiTrack-macOS-intel.dmg
             Sound2LightMultiTrack-Windows-x64.zip
