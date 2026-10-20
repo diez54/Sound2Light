@@ -1,4 +1,4 @@
-// Sound2Light Multitrack
+// Sound2Light MULTIPISTE
 // Multitrack extension (c) 2026 - released under the MIT license (see Track.h).
 
 #include "MultiChannelInput.h"
@@ -193,7 +193,7 @@ bool MultiChannelInput::setInputByName(const QString& name)
 
 	RtAudio::StreamOptions options;
 	options.flags = RTAUDIO_MINIMIZE_LATENCY;
-	options.streamName = "Sound2Light Multitrack";
+	options.streamName = "Sound2Light MULTIPISTE";
 
 	unsigned int bufferFrames = 256;
 	RtAudioErrorType err = m_audio->openStream(nullptr, &params, RTAUDIO_FLOAT32, rate,

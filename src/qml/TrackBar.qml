@@ -79,6 +79,13 @@ Rectangle {
 			Layout.fillWidth: true
 		}
 
+		GreyText {
+			text: "MULTIPISTE"
+			font.bold: true
+			font.letterSpacing: 3
+			color: "#FF6633"
+		}
+
 		DarkCheckBox {
 			text: "OSC multipiste (/s2l/chN/…)"
 			checked: controller.multitrackOscEnabled
@@ -203,7 +210,14 @@ Rectangle {
 							}
 							return m
 						}
-						currentIndex: tile.channel + 1
+						// the ComboBox resets its index when the model changes,
+						// so the wanted index is re-applied after every model / channel change:
+						property int wantedIndex: tile.channel + 1
+						function applyWanted() { if (currentIndex !== wantedIndex) currentIndex = wantedIndex }
+						Component.onCompleted: applyWanted()
+						onWantedIndexChanged: applyWanted()
+						onModelChanged: Qt.callLater(applyWanted)
+						onCountChanged: Qt.callLater(applyWanted)
 						onActivated: controller.setTrackChannel(tile.trackIndex, index - 1)
 					}
 

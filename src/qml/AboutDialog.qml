@@ -58,6 +58,22 @@ Dialog {
 					}
 					GreyText {
 						width: parent.width
+						height: 34
+						font.pointSize: 18
+						font.bold: true
+						font.letterSpacing: 3
+						color: "#FF6633"
+						text: "MULTIPISTE"
+					}
+					GreyText {
+						width: parent.width
+						height: 40
+						font.pointSize: 9
+						wrapMode: Text.WordWrap
+						text: "Une chaîne d'analyse par canal audio, jusqu'à 16 pistes.\nBasé sur Sound2Light d'ETC Labs (MIT)."
+					}
+					GreyText {
+						width: parent.width
 						height: 30
 						font.pointSize: 10
 						text: "Version: " + controller.getVersionString()

@@ -27,6 +27,7 @@
 #include <QSettings>
 #include <QScreen>
 #include <QSplashScreen>
+#include <QColor>
 
 
 int main(int argc, char *argv[]) {
@@ -37,13 +38,14 @@ int main(int argc, char *argv[]) {
 	// these parameters are used by QSettings:
 	QCoreApplication::setOrganizationName("Sound2Light");
 	// separate name so the settings do not collide with the original Sound2Light:
-	QCoreApplication::setApplicationName("Sound2Light Multitrack");
+	QCoreApplication::setApplicationName("Sound2Light MULTIPISTE");
 	QSettings::setDefaultFormat(QSettings::IniFormat);
 
 	// ----------- Show Splash Screen --------
 	QPixmap pixmap(":/images/icons/etclogo.png");
 	QSplashScreen splash(pixmap);
 	splash.show();
+	splash.showMessage("Sound2Light MULTIPISTE", Qt::AlignBottom | Qt::AlignHCenter, QColor("#FF6633"));
 
 	// call processEvents() to load image in Splash Screen:
 	app.processEvents();

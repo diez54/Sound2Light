@@ -1,4 +1,4 @@
-TARGET = s2l-multitrack
+TARGET = s2l-multipiste
 LANGUAGE = C++
 
 TEMPLATE = app
