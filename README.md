@@ -1,4 +1,4 @@
-# Sound2Light Tool
+# Sound2Light Tool multipiste version 
 
 The Sound2Light tool converts live audio signals to trigger events that can be sent as OSC messages. It can reproduce the sound-to-light function of the NT/NTX consoles with systems of the Eos-, Cobalt- and ColorSource-family. It can also be remotely controlled by OSC.
 
