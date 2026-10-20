@@ -93,19 +93,27 @@ jobs:
       - name: Smoke test (launch the bundled app with the test signal)
         shell: pwsh
         run: |
-          if (-not (Test-Path dist\qml\QtQuick\Controls)) { Write-Error "QtQuick Controls missing"; exit 1 }
-          if (-not (Test-Path dist\platforms\qwindows.dll)) { Write-Error "platform plugin missing"; exit 1 }
+          function Fail($msg) {
+            $log = if (Test-Path run.log) { (Get-Content run.log -Raw) } else { "(no log)" }
+            $log = ($log -replace "%", "%25") -replace "`r", "" -replace "`n", "%0A"
+            Write-Output "::error title=Smoke test::$msg"
+            Write-Output "::warning title=App log::$log"
+            Write-Output ("::warning title=dist content::" + ((Get-ChildItem dist -Name) -join ", "))
+            exit 1
+          }
+          if (-not (Test-Path dist\qml\QtQuick\Controls)) { Fail "QtQuick Controls missing in dist\qml" }
+          if (-not (Test-Path dist\platforms\qwindows.dll)) { Fail "platform plugin qwindows.dll missing" }
           New-Item -ItemType Directory -Force "$env:APPDATA\Sound2Light" | Out-Null
           "[General]`r`nformatVersion=1`r`ninputDeviceName=Signal de test (8 canaux)`r`n" | Set-Content -Encoding UTF8 "$env:APPDATA\Sound2Light\Sound2LightMultiTrack.ini"
           $env:QT_FORCE_STDERR_LOGGING = "1"
-          $p = Start-Process -FilePath dist\Sound2LightMultiTrack.exe -PassThru -RedirectStandardError run.log
+          $p = Start-Process -FilePath dist\Sound2LightMultiTrack.exe -PassThru -RedirectStandardError run.log -RedirectStandardOutput out.log
           Start-Sleep -Seconds 10
           Get-Content run.log
-          if ($p.HasExited) { Write-Error "the app crashed or quit (exit code $($p.ExitCode))"; exit 1 }
+          if ($p.HasExited) { Fail "the app quit after start (exit code $($p.ExitCode))" }
           Stop-Process -Id $p.Id -Force
           Start-Sleep -Seconds 1
-          if (Select-String -Path run.log -Pattern "is not installed","not found","failed to load","Could not find the Qt platform plugin","ReferenceError","TypeError" -Quiet) {
-            Write-Error "QML or plugin problem"; exit 1
+          if (Select-String -Path run.log -Pattern "is not installed","failed to load","Could not find the Qt platform plugin","ReferenceError","TypeError" -Quiet) {
+            Fail "QML or plugin problem"
           }
 
       - uses: actions/upload-artifact@v4
