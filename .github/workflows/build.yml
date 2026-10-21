@@ -85,7 +85,9 @@ jobs:
             v=$(minos "$f"); [ -z "$v" ] && continue
             if vgt "$v" "$WORST"; then WORST="$v"; WORSTFILE="${f#$APP/}"; fi
             if vgt "$v" "$MIN"; then BAD="$BAD ${f#$APP/}=$v"; fi
-            l=$(otool -L "$f" | tail -n +2 | grep -E "/opt/homebrew|/usr/local" || true)
+            # real dependencies only: skip the library's own install name (LC_ID_DYLIB)
+            id=$(otool -D "$f" | tail -n +2 | head -1)
+            l=$(otool -L "$f" | tail -n +2 | awk '{print $1}' | grep -vxF "${id:-__none__}" | grep -E "^(/opt/homebrew|/usr/local)" || true)
             [ -n "$l" ] && LEAK="$LEAK ${f#$APP/}:$(echo $l | tr '\n' ' ')"
           done < <(find "$APP" -type f \( -perm -u+x -o -name "*.dylib" \))
           ARCHS=$(lipo -archs "$APP/Contents/MacOS/Sound2LightMultiTrack")
