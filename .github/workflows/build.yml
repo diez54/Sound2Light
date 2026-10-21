@@ -23,10 +23,12 @@ jobs:
             arch: intel
             qt: official
             min: '10.13'
+            label: 'macOS-Intel-et-AppleSilicon-10.13plus'
           - runner: macos-14
             arch: arm64
             qt: brew
-            min: '11.0'
+            min: '14.0'   # Homebrew libraries are built for macOS 14
+            label: 'macOS-AppleSilicon-natif-14plus'
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +70,7 @@ jobs:
           codesign --force --deep --sign - "$APP"
           mkdir dmg && cp -R "$APP" dmg/
           ln -s /Applications dmg/Applications
-          hdiutil create -volname "Sound2LightMultiTrack" -srcfolder dmg -ov -format UDZO ../Sound2LightMultiTrack-macOS-${{ matrix.arch }}.dmg
+          hdiutil create -volname "Sound2LightMultiTrack" -srcfolder dmg -ov -format UDZO ../Sound2LightMultiTrack-${{ matrix.label }}.dmg
 
       - name: Check every binary in the bundle (minimum macOS, no Homebrew paths)
         run: |
@@ -114,8 +116,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Sound2LightMultiTrack-macOS-${{ matrix.arch }}
-          path: Sound2LightMultiTrack-macOS-${{ matrix.arch }}.dmg
+          name: Sound2LightMultiTrack-${{ matrix.label }}
+          path: Sound2LightMultiTrack-${{ matrix.label }}.dmg
 
   # ---------------------------------------------------------------- Windows (x64)
   windows:
@@ -203,6 +205,6 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            Sound2LightMultiTrack-macOS-arm64/Sound2LightMultiTrack-macOS-arm64.dmg
-            Sound2LightMultiTrack-macOS-intel/Sound2LightMultiTrack-macOS-intel.dmg
+            Sound2LightMultiTrack-macOS-Intel-et-AppleSilicon-10.13plus/Sound2LightMultiTrack-macOS-Intel-et-AppleSilicon-10.13plus.dmg
+            Sound2LightMultiTrack-macOS-AppleSilicon-natif-14plus/Sound2LightMultiTrack-macOS-AppleSilicon-natif-14plus.dmg
             Sound2LightMultiTrack-Windows-x64.zip

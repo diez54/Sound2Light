@@ -55,7 +55,10 @@ Toutes celles de l'original, plus :
 
 ## Dante
 
-- **macOS** : Dante Virtual Soundcard apparaît comme une carte CoreAudio multicanal. Choisis-la dans Settings, puis assigne une entrée à chaque piste.
+- **macOS** : deux versions.
+  - `Sound2LightMultiTrack-macOS-Intel-et-AppleSilicon-10.13plus` : **la version à prendre par défaut.** Marche sur tous les Mac à partir de macOS 10.13 (High Sierra), Intel comme Apple Silicon. Sur Apple Silicon, elle passe par Rosetta : macOS propose de l'installer au premier lancement, accepter.
+  - `Sound2LightMultiTrack-macOS-AppleSilicon-natif-14plus` : version native Apple Silicon, uniquement pour macOS 14 (Sonoma) ou plus récent.
+  - L'app n'est pas signée par Apple. Après l'avoir glissée dans Applications, ouvrir le Terminal et taper `xattr -cr /Applications/Sound2LightMultiTrack.app`, ou passer par Réglages Système > Confidentialité et sécurité > « Ouvrir quand même ». Autoriser ensuite l'accès au micro, sinon l'entrée reste muette.
 - **Windows** : DVS en mode **ASIO** (recommandé) ou WDM. Les deux apparaissent dans la liste, préfixés `[ASIO]` ou `[WASAPI]`.
 - 48 kHz est rééchantillonné automatiquement en 44,1 kHz pour l'analyse.
 
